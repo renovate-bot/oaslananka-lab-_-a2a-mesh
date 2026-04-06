@@ -57,8 +57,10 @@
     "docs:build": "vitepress build docs-site",
     "docs:preview": "vitepress preview docs-site",
     "docs:api": "typedoc",
-    "release": "changeset publish",
+    "release": "npm run release:stable",
+    "release:all": "changeset publish",
     "release:stable": "npm run publish:stable",
+    "release:version": "changeset version",
     "prepare": "husky"
   },
   "lint-staged": {

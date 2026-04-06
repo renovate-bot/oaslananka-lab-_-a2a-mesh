@@ -34,6 +34,21 @@ npm run test -- --coverage
 
 Releases are cut by the maintainer using [Changesets](https://github.com/changesets/changesets).
 Add a changeset for any public package change with `npx changeset`.
+
+Maintainers should version packages with:
+
+```bash
+npx changeset version
+```
+
+Then publish the stable npm package set with:
+
+```bash
+npm run release:stable
+```
+
+Use `npm run release:all` only when you intentionally want to publish additional
+public workspaces beyond the stable package set.
 You do not need CI/CD access to contribute — local test pass is sufficient.
 
 ## AI-assisted contributions
