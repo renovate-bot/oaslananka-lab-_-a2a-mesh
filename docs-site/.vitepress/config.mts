@@ -7,6 +7,14 @@ export default defineConfig({
   description: "Production-ready TypeScript runtime for Google's A2A Protocol",
   cleanUrls: true,
   lastUpdated: true,
+  vite: {
+    server: {
+      host: '127.0.0.1',
+    },
+    preview: {
+      host: '127.0.0.1',
+    },
+  },
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${DOCS_BASE_PATH}logo.svg` }],
     [

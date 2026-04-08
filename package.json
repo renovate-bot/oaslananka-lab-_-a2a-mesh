@@ -53,9 +53,9 @@
     "demo:local": "tsx apps/demo/main.ts",
     "demo:smoke": "tsx apps/demo/run-demo.ts",
     "typecheck": "npm run build:packages && npx tsc -p tsconfig.test.json --noEmit && npx tsc -p apps/demo/tsconfig.json --noEmit && npx tsc -p apps/registry-ui/tsconfig.json --noEmit",
-    "docs:dev": "vitepress dev docs-site",
-    "docs:build": "vitepress build docs-site",
-    "docs:preview": "vitepress preview docs-site",
+    "docs:dev": "npm --prefix docs-site run dev",
+    "docs:build": "npm --prefix docs-site run build",
+    "docs:preview": "npm --prefix docs-site run preview",
     "docs:api": "typedoc",
     "release": "npm run release:stable",
     "release:all": "changeset publish",
@@ -103,7 +103,6 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.0",
     "unbuild": "^3.6.1",
-    "vitepress": "^1.6.4",
     "vitest": "^4.1.2"
   }
 }

@@ -7,9 +7,9 @@
     "npm": ">=10 <11"
   },
   "scripts": {
-    "dev": "vitepress dev .",
+    "dev": "vitepress dev . --host 127.0.0.1",
     "build": "vitepress build .",
-    "preview": "vitepress preview ."
+    "preview": "vitepress preview . --host 127.0.0.1"
   },
   "devDependencies": {
     "vitepress": "^1.6.4"
