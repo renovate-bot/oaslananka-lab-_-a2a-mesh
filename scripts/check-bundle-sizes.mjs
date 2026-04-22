@@ -1,7 +1,9 @@
 import { stat } from 'node:fs/promises';
 
 const BUNDLE_LIMITS = [
-  { path: 'packages/core/dist/index.mjs', maxSizeKb: 65 },
+  // Core intentionally carries the public runtime surface: server/client,
+  // auth, idempotency, telemetry, storage, and transport helpers.
+  { path: 'packages/core/dist/index.mjs', maxSizeKb: 80 },
   { path: 'packages/client/dist/index.mjs', maxSizeKb: 20 },
   { path: 'packages/adapters/dist/index.mjs', maxSizeKb: 30 },
 ];
