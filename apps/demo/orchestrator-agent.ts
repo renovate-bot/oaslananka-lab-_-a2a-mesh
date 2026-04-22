@@ -4,6 +4,7 @@ import {
   type AgentCard,
   type Artifact,
   type Message,
+  type Part,
   type Task,
 } from 'a2a-mesh';
 import { BaseAdapter } from 'a2a-mesh-adapters';
@@ -52,7 +53,7 @@ function sleep(ms: number): Promise<void> {
 function extractTextArtifact(task: Task): string {
   const textPart = task.artifacts
     ?.flatMap((artifact: NonNullable<Task['artifacts']>[number]) => artifact.parts)
-    .find((part) => part.type === 'text');
+    .find((part: Part) => part.type === 'text');
 
   if (textPart?.type !== 'text') {
     throw new Error('Task completed without a text artifact');
@@ -74,7 +75,7 @@ export class OrchestratorAgent extends BaseAdapter {
   async handleTask(task: Task, message: Message): Promise<Artifact[]> {
     logger.info('Orchestrator received task', { taskId: task.id });
 
-    const inputText = message.parts.find((part) => part.type === 'text');
+    const inputText = message.parts.find((part: Part) => part.type === 'text');
     if (!inputText || inputText.type !== 'text') {
       throw new Error('Orchestrator requires text input');
     }

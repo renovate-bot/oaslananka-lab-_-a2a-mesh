@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { A2AClient } from 'a2a-mesh';
+import { A2AClient, type Part } from 'a2a-mesh';
 import { getDemoConfig } from './config.js';
 
 function sleep(ms: number): Promise<void> {
@@ -34,7 +34,7 @@ async function runSmokeTest() {
     if (nextTask.status.state === 'completed') {
       const textPart = nextTask.artifacts
         ?.flatMap((artifact: NonNullable<typeof nextTask.artifacts>[number]) => artifact.parts)
-        .find((part) => part.type === 'text');
+        .find((part: Part) => part.type === 'text');
 
       process.stdout.write('\n✅ Smoke test passed!\n');
       process.stdout.write(

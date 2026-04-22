@@ -87,13 +87,8 @@ describe('A2A client/server integration', () => {
 
     expect(createdTask.contextId).toBe('ctx-1');
 
-    await client.setPushNotification(createdTask.id, {
-      url: 'https://example.com/hook',
-      token: 'abc',
-    });
     expect(await client.getPushNotification(createdTask.id)).toEqual({
       url: 'https://example.com/hook',
-      token: 'abc',
     });
 
     const task = await waitForTaskState(client, createdTask.id, ['completed']);

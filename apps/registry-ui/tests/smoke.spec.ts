@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-function installMockEventSource(page: Parameters<typeof test>[0]['page']) {
+function installMockEventSource(page: Page) {
   return page.addInitScript(() => {
     class MockEventSource {
       url: string;

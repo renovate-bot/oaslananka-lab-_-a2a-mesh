@@ -193,6 +193,7 @@ describe('A2AServer', () => {
         )) as Task
       ).id,
     ).toBe(task.id);
+    const cancelTarget = server.createTask('ctx-1');
     expect(
       (
         (await server.callRpc(
@@ -200,7 +201,7 @@ describe('A2AServer', () => {
             jsonrpc: '2.0',
             id: 'cancel-1',
             method: 'tasks/cancel',
-            params: { taskId: task.id },
+            params: { taskId: cancelTarget.id },
           },
           { 'x-api-key': 'secret' },
         )) as Task
@@ -310,7 +311,7 @@ describe('A2AServer', () => {
     expect(health.memory.heapTotalMb).toBeGreaterThan(0);
   });
 
-  it('reuses task ids, stores push configs and lists all tasks without a context filter', async () => {
+  it('rejects terminal task reuse, stores push configs and lists all tasks without a context filter', async () => {
     const server = new HarnessServer();
     const message: Message = {
       role: 'user',
@@ -337,21 +338,24 @@ describe('A2AServer', () => {
       }),
     ).toBeNull();
 
-    const reused = (await server.callRpc({
-      jsonrpc: '2.0',
-      id: 'reuse-2',
-      method: 'message/send',
-      params: {
-        taskId: created.id,
-        message: {
-          ...message,
-          messageId: 'message-reuse-2',
+    await expect(
+      server.callRpc({
+        jsonrpc: '2.0',
+        id: 'reuse-2',
+        method: 'message/send',
+        params: {
+          taskId: created.id,
+          message: {
+            ...message,
+            messageId: 'message-reuse-2',
+          },
         },
-      },
-    })) as Task;
+      }),
+    ).rejects.toMatchObject({
+      code: ErrorCodes.InvalidTaskTransition,
+    });
 
-    expect(reused.id).toBe(created.id);
-
+    const pending = server.createTask();
     const pushConfig = {
       url: 'https://example.com/hook',
       token: 'secret-token',
@@ -362,7 +366,7 @@ describe('A2AServer', () => {
         id: 'push-set',
         method: 'tasks/pushNotification/set',
         params: {
-          taskId: created.id,
+          taskId: pending.id,
           pushNotificationConfig: pushConfig,
         },
       }),
@@ -373,7 +377,7 @@ describe('A2AServer', () => {
         jsonrpc: '2.0',
         id: 'push-get',
         method: 'tasks/pushNotification/get',
-        params: { taskId: created.id },
+        params: { taskId: pending.id },
       }),
     ).toEqual(pushConfig);
 
@@ -386,6 +390,7 @@ describe('A2AServer', () => {
 
     expect(listed.total).toBeGreaterThanOrEqual(1);
     expect(listed.tasks.some((task) => task.id === created.id)).toBe(true);
+    expect(listed.tasks.some((task) => task.id === pending.id)).toBe(true);
   });
 
   it('rejects unsupported operations and missing task parameters', async () => {
