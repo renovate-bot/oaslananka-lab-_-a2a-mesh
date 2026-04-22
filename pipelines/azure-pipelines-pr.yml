@@ -1,9 +1,8 @@
-pr:
-  autoCancel: true
-  branches:
-    include:
-      - main
-  drafts: false
+# Azure DevOps PR verification is intentionally manual. Automated PR CI runs
+# from the GitHub organization mirror; run this pipeline explicitly only when
+# Azure-specific validation is needed.
+trigger: none
+pr: none
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -18,6 +17,9 @@ steps:
 
   - script: npm ci
     displayName: 'Install dependencies'
+
+  - script: npm ci --prefix docs-site --prefer-offline
+    displayName: 'Install docs-site dependencies'
 
   - script: npm run lint
     displayName: 'Lint check'

@@ -8,11 +8,7 @@ parameters:
     type: boolean
     default: false
 
-trigger:
-  tags:
-    include:
-      - 'v*'
-
+trigger: none
 pr: none
 
 variables:
@@ -40,6 +36,9 @@ stages:
 
           - script: npm ci
             displayName: 'Install dependencies'
+
+          - script: npm ci --prefix docs-site --prefer-offline
+            displayName: 'Install docs-site dependencies'
 
           - script: |
               echo "Release pipeline dry run: $(DRY_RUN)"

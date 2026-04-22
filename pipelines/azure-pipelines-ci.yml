@@ -1,20 +1,8 @@
-trigger:
-  batch: true
-  branches:
-    include:
-      - main
-      - 'feature/*'
-      - 'fix/*'
-  paths:
-    exclude:
-      - 'docs/*'
-      - '*.md'
-
-pr:
-  autoCancel: true
-  branches:
-    include:
-      - main
+# Azure DevOps is a manual verification target. Automated CI/CD runs from
+# the GitHub organization mirror so source pushes do not start duplicate
+# Azure jobs.
+trigger: none
+pr: none
 
 jobs:
   - template: templates/ci-job.yml
