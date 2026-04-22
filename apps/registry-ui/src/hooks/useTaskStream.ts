@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchRecentTasks, subscribeToTaskStream, type RegistryTaskEvent } from '../api/registry';
+import {
+  fetchRecentTasks,
+  subscribeToTaskStream,
+  type RegistryAccessMode,
+  type RegistryTaskEvent,
+  RegistryApiError,
+} from '../api/registry';
 
 function mergeTaskEvent(
   currentTasks: RegistryTaskEvent[],
@@ -15,25 +21,45 @@ function mergeTaskEvent(
     .slice(0, limit);
 }
 
-export function useTaskStream(limit = 30) {
+export function useTaskStream(accessMode: RegistryAccessMode, limit = 30) {
   const [tasks, setTasks] = useState<RegistryTaskEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
   const load = useCallback(async () => {
+    if (accessMode !== 'authenticated') {
+      setTasks([]);
+      setConnected(false);
+      setLoading(false);
+      setError('Task stream requires operator authentication.');
+      return;
+    }
+
     try {
       const nextTasks = await fetchRecentTasks(limit);
       setTasks(nextTasks);
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load task stream');
+      if (
+        loadError instanceof RegistryApiError &&
+        (loadError.status === 401 || loadError.status === 403)
+      ) {
+        setError('Task stream requires operator authentication.');
+      } else {
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load task stream');
+      }
     } finally {
       setLoading(false);
     }
-  }, [limit]);
+  }, [accessMode, limit]);
 
   useEffect(() => {
+    if (accessMode !== 'authenticated') {
+      void load();
+      return;
+    }
+
     void load();
 
     const unsubscribe = subscribeToTaskStream(
@@ -50,7 +76,7 @@ export function useTaskStream(limit = 30) {
     return () => {
       unsubscribe();
     };
-  }, [limit, load]);
+  }, [accessMode, limit, load]);
 
   return {
     tasks,

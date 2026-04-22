@@ -5,43 +5,37 @@
     {
       "title": "Registered Agents",
       "type": "stat",
-      "targets": [{ "expr": "a2a_registry_agents_total" }]
+      "targets": [{ "expr": "a2a_registry_agents" }]
     },
     {
-      "title": "Active Tasks",
-      "type": "timeseries",
-      "targets": [{ "expr": "a2a_tasks_active_total" }]
+      "title": "Healthy Agents",
+      "type": "stat",
+      "targets": [{ "expr": "a2a_registry_healthy_agents" }]
     },
     {
-      "title": "Completed Tasks",
-      "type": "timeseries",
-      "targets": [{ "expr": "a2a_tasks_completed_total" }]
+      "title": "Active Tenants",
+      "type": "stat",
+      "targets": [{ "expr": "a2a_registry_active_tenants" }]
     },
     {
-      "title": "Failed Tasks",
-      "type": "timeseries",
-      "targets": [{ "expr": "a2a_tasks_failed_total" }]
+      "title": "Public Agents",
+      "type": "stat",
+      "targets": [{ "expr": "a2a_registry_public_agents" }]
     },
     {
-      "title": "RPC Latency p95",
+      "title": "Registrations",
       "type": "timeseries",
-      "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(a2a_rpc_latency_bucket[5m])) by (le))" }
-      ]
+      "targets": [{ "expr": "rate(a2a_registry_registrations_total[5m])" }]
     },
     {
-      "title": "Rate Limit Hits",
+      "title": "Registry Searches",
       "type": "timeseries",
-      "targets": [{ "expr": "sum(rate(a2a_rate_limit_hits_total[5m]))" }]
+      "targets": [{ "expr": "rate(a2a_registry_searches_total[5m])" }]
     },
     {
-      "title": "Push Notification Success Ratio",
+      "title": "Heartbeats",
       "type": "timeseries",
-      "targets": [
-        {
-          "expr": "sum(rate(a2a_push_notifications_success_total[5m])) / sum(rate(a2a_push_notifications_attempt_total[5m]))"
-        }
-      ]
+      "targets": [{ "expr": "rate(a2a_registry_heartbeats_total[5m])" }]
     }
   ],
   "schemaVersion": 39,

@@ -56,6 +56,8 @@ export function isPrivateIP(ip: string): boolean {
 export interface SafeUrlOptions {
   allowLocalhost?: boolean;
   allowPrivateNetworks?: boolean;
+  allowUnresolvedHostnames?: boolean;
+  allowedHostnames?: string[];
 }
 
 /**
@@ -79,7 +81,15 @@ export async function validateSafeUrl(
 
   const hostname = url.hostname;
   const allowPrivateNetworks = options.allowPrivateNetworks ?? false;
+  const allowUnresolvedHostnames = options.allowUnresolvedHostnames ?? false;
   const isLocalHostname = hostname === 'localhost' || hostname === '::1' || hostname === '[::1]';
+  const allowedHostnames = new Set(
+    (options.allowedHostnames ?? []).map((value) => value.toLowerCase()),
+  );
+
+  if (allowedHostnames.has(hostname.toLowerCase())) {
+    return url;
+  }
 
   if (options.allowLocalhost && isLocalHostname) {
     return url;
@@ -88,7 +98,11 @@ export async function validateSafeUrl(
   // Check if hostname is already an IP
   const hostnameWithoutBrackets = hostname.replace(/^\[/, '').replace(/\]$/, '');
   if (isIP(hostnameWithoutBrackets)) {
-    if (isPrivateIP(hostnameWithoutBrackets) && !allowPrivateNetworks) {
+    if (
+      isPrivateIP(hostnameWithoutBrackets) &&
+      !allowPrivateNetworks &&
+      !(options.allowLocalhost && isLoopbackIP(hostnameWithoutBrackets))
+    ) {
       throw new Error(`SSRF Prevention: Private IP addresses are not allowed (${hostname})`);
     }
     return url;
@@ -98,18 +112,39 @@ export async function validateSafeUrl(
     throw new Error('SSRF Prevention: Localhost is not allowed');
   }
 
+  let addresses: string[];
   try {
-    const addresses = await dns.resolve(hostname);
-    for (const address of addresses) {
-      if (isPrivateIP(address) && !allowPrivateNetworks) {
-        throw new Error(`SSRF Prevention: Hostname resolves to a private IP address (${address})`);
-      }
+    addresses = await dns.resolve(hostname);
+  } catch (err: unknown) {
+    if (allowUnresolvedHostnames) {
+      return url;
     }
-  } catch {
-    // Allow unresolved public hostnames so development and offline CI environments
-    // do not reject otherwise valid outbound URLs purely due local DNS availability.
-    return url;
+    throw new Error('SSRF Prevention: Hostname could not be resolved', { cause: err });
+  }
+
+  for (const address of addresses) {
+    if (
+      isPrivateIP(address) &&
+      !allowPrivateNetworks &&
+      !(options.allowLocalhost && isLoopbackIP(address))
+    ) {
+      throw new Error(`SSRF Prevention: Hostname resolves to a private IP address (${address})`);
+    }
   }
 
   return url;
+}
+
+function isLoopbackIP(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+  if (normalized === '::1') {
+    return true;
+  }
+  if (normalized.startsWith('::ffff:')) {
+    return isLoopbackIP(normalized.slice(7));
+  }
+  if (isIPv4(ip)) {
+    return ip.startsWith('127.');
+  }
+  return false;
 }

@@ -8,14 +8,8 @@
 import { BaseAdapter } from '../custom/BaseAdapter.js';
 import { fetchWithPolicy } from 'a2a-mesh';
 import { logger, normalizeAgentCard } from 'a2a-mesh';
-import type { AnyAgentCard, ExtensibleArtifact, Message, Part, Task, TextPart } from 'a2a-mesh';
-
-function extractText(parts: Part[]): string {
-  return parts
-    .filter((part): part is TextPart => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n');
-}
+import type { AnyAgentCard, ExtensibleArtifact, Message, Task } from 'a2a-mesh';
+import { createTextArtifact, extractText } from '../custom/contract.js';
 
 /**
  * Thin HTTP bridge adapter for CrewAI Python services.
@@ -66,17 +60,17 @@ export class CrewAIAdapter extends BaseAdapter {
       metadata?: Record<string, unknown>;
     };
 
-    const artifact: ExtensibleArtifact = {
+    const artifact = createTextArtifact(task, {
       artifactId: `crewai-${Date.now()}`,
       name: 'CrewAI Response',
-      parts: [{ type: 'text', text: json.output ?? '' }],
-      index: 0,
-      lastChunk: true,
+      text: json.output ?? '',
+      provider: 'crewai',
+      compatibility: 'beta',
+      supportsStreaming: false,
       metadata: {
-        provider: 'crewai',
         ...(json.metadata ?? {}),
       },
-    };
+    }) as ExtensibleArtifact;
     return [artifact];
   }
 }

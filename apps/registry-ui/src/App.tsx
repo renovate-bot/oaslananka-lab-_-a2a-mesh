@@ -1,54 +1,93 @@
-import { startTransition, useDeferredValue, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowUpRight, Cpu, RefreshCw, SignalHigh } from 'lucide-react';
-import { fetchMetrics, type RegisteredAgent, type RegistryMetrics } from './api/registry';
-import { AgentGrid } from './components/AgentGrid';
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Bot,
+  Globe2,
+  Lock,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react';
+import {
+  emptyMetrics,
+  fetchMetrics,
+  type RegisteredAgent,
+  type RegistryMetrics,
+} from './api/registry';
 import { HealthBadge } from './components/HealthBadge';
-import { MetricBar } from './components/MetricBar';
-import { Sidebar, type ViewMode } from './components/Sidebar';
 import { TaskStream } from './components/TaskStream';
 import { TopologyGraph } from './components/TopologyGraph';
 import { useAgents } from './hooks/useAgents';
 import { useTaskStream } from './hooks/useTaskStream';
 
-const emptyMetrics: RegistryMetrics = {
-  registrations: 0,
-  searches: 0,
-  heartbeats: 0,
-  agentCount: 0,
-  healthyAgents: 0,
-  unhealthyAgents: 0,
-  unknownAgents: 0,
-  activeTenants: 0,
-  publicAgents: 0,
-};
+type ViewMode = 'fleet' | 'topology' | 'stream';
+type StatusFilter = 'all' | 'healthy' | 'unhealthy' | 'unknown';
+type CapabilityFilter = 'all' | 'streaming' | 'mcp';
 
 function matchesQuery(agent: RegisteredAgent, query: string): boolean {
   const haystack = [
     agent.card.name,
     agent.card.description,
+    agent.tenantId,
     ...(agent.card.skills ?? []).map((skill) => `${skill.name} ${(skill.tags ?? []).join(' ')}`),
     ...(agent.tags ?? []),
   ]
+    .filter(Boolean)
     .join(' ')
     .toLowerCase();
 
   return haystack.includes(query.trim().toLowerCase());
 }
 
+function formatRelativeTime(timestamp?: string): string {
+  if (!timestamp) {
+    return 'Never';
+  }
+
+  const deltaMs = Date.now() - Date.parse(timestamp);
+  if (!Number.isFinite(deltaMs)) {
+    return 'Unknown';
+  }
+
+  const deltaMinutes = Math.floor(deltaMs / 60000);
+  if (deltaMinutes < 1) {
+    return 'Just now';
+  }
+  if (deltaMinutes < 60) {
+    return `${deltaMinutes}m ago`;
+  }
+
+  const deltaHours = Math.floor(deltaMinutes / 60);
+  if (deltaHours < 24) {
+    return `${deltaHours}h ago`;
+  }
+
+  const deltaDays = Math.floor(deltaHours / 24);
+  return `${deltaDays}d ago`;
+}
+
+function classNames(...values: Array<string | false | null | undefined>): string {
+  return values.filter(Boolean).join(' ');
+}
+
 export default function App() {
-  const { agents, loading, error, refresh } = useAgents();
+  const { agents, loading, error, accessMode, refresh } = useAgents();
   const {
     tasks,
     loading: tasksLoading,
     error: tasksError,
     connected: taskStreamConnected,
     refresh: refreshTasks,
-  } = useTaskStream();
-  const [metrics, setMetrics] = useState<RegistryMetrics>(emptyMetrics);
-  const [view, setView] = useState<ViewMode>('overview');
+  } = useTaskStream(accessMode);
+  const [metrics, setMetrics] = useState<RegistryMetrics>(emptyMetrics());
+  const [view, setView] = useState<ViewMode>('fleet');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'healthy' | 'unhealthy'>('all');
-  const [selectedAgent, setSelectedAgent] = useState<RegisteredAgent | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>('all');
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
@@ -62,35 +101,66 @@ export default function App() {
     void loadMetrics();
     const interval = window.setInterval(() => {
       void loadMetrics();
-    }, 5_000);
+    }, 10_000);
 
     return () => window.clearInterval(interval);
   }, []);
 
+  const tenants = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          agents
+            .map((agent) => agent.tenantId)
+            .filter((tenant): tenant is string => Boolean(tenant)),
+        ),
+      ).sort(),
+    [agents],
+  );
+
+  const filteredAgents = useMemo(
+    () =>
+      agents.filter((agent) => {
+        const matchesStatus = statusFilter === 'all' ? true : agent.status === statusFilter;
+        const matchesCapability =
+          capabilityFilter === 'all'
+            ? true
+            : capabilityFilter === 'streaming'
+              ? agent.card.capabilities?.streaming === true
+              : agent.card.capabilities?.mcpCompatible === true;
+        const matchesTenant =
+          tenantFilter === 'all' ? true : (agent.tenantId ?? 'unassigned') === tenantFilter;
+
+        return (
+          matchesStatus && matchesCapability && matchesTenant && matchesQuery(agent, deferredSearch)
+        );
+      }),
+    [agents, capabilityFilter, deferredSearch, statusFilter, tenantFilter],
+  );
+
   useEffect(() => {
-    if (!selectedAgent && agents.length > 0) {
-      setSelectedAgent(agents[0] ?? null);
+    if (!selectedAgentId && filteredAgents.length > 0) {
+      setSelectedAgentId(filteredAgents[0]?.id ?? null);
       return;
     }
 
-    if (selectedAgent) {
-      const refreshedSelectedAgent = agents.find((agent) => agent.id === selectedAgent.id) ?? null;
-      setSelectedAgent(refreshedSelectedAgent);
+    if (selectedAgentId && !filteredAgents.some((agent) => agent.id === selectedAgentId)) {
+      setSelectedAgentId(filteredAgents[0]?.id ?? null);
     }
-  }, [agents, selectedAgent]);
+  }, [filteredAgents, selectedAgentId]);
 
-  const filteredAgents = agents.filter((agent) => {
-    const matchesStatus = statusFilter === 'all' ? true : agent.status === statusFilter;
-    return matchesStatus && matchesQuery(agent, deferredSearch);
-  });
-
-  const healthyAgents =
-    metrics.healthyAgents || agents.filter((agent) => agent.status === 'healthy').length;
-  const unhealthyAgents =
-    metrics.unhealthyAgents || agents.filter((agent) => agent.status === 'unhealthy').length;
+  const selectedAgent =
+    filteredAgents.find((agent) => agent.id === selectedAgentId) ??
+    agents.find((agent) => agent.id === selectedAgentId) ??
+    null;
   const selectedAgentTasks = selectedAgent
     ? tasks.filter((task) => task.agentId === selectedAgent.id)
-    : tasks;
+    : [];
+  const activeTaskCount = tasks.filter((task) =>
+    ['submitted', 'queued', 'working', 'input-required', 'waiting_on_external'].includes(
+      task.status,
+    ),
+  ).length;
 
   const handleRefresh = () => {
     void refresh();
@@ -98,290 +168,558 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 lg:px-6">
-      <div className="mx-auto grid max-w-[1500px] gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <Sidebar
-          activeView={view}
-          onChangeView={setView}
-          totalAgents={metrics.agentCount || agents.length}
-          healthyAgents={healthyAgents}
-          unhealthyAgents={unhealthyAgents}
-          taskStreamConnected={taskStreamConnected}
-          search={search}
-          onSearchChange={setSearch}
-          onRefresh={handleRefresh}
-        />
-
-        <main className="space-y-6">
-          <section className="glass-panel relative overflow-hidden rounded-[36px] border border-white/10 p-6 shadow-[0_30px_90px_rgba(2,8,23,0.35)]">
-            <div className="absolute inset-y-0 right-0 w-80 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.18),transparent_62%)]" />
-            <div className="relative flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.34em] text-cyan-100">
-                  Production runtime
-                </p>
-                <h2 className="mesh-display mt-3 max-w-3xl text-4xl font-bold leading-tight text-white sm:text-5xl">
-                  The control plane your A2A network deserved from day one.
-                </h2>
-                <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200/85">
-                  Watch discovery, health, and task execution in one place. This UI is backed by
-                  live registry events and aggregated task updates instead of static mock data.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:w-[420px]">
-                <div className="rounded-[28px] border border-white/10 bg-white/6 px-5 py-5">
-                  <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                    Registry status
-                  </p>
-                  <p className="mt-2 flex items-center gap-2 text-sm text-slate-100">
-                    <SignalHigh size={16} className="text-cyan-200" />
-                    {taskStreamConnected ? 'Live signal' : 'Degraded signal'}
-                  </p>
-                  <p className="mt-2 text-xs text-slate-400">
-                    JSON metrics + SSE + task polling summary enabled
-                  </p>
-                </div>
-                <div className="rounded-[28px] border border-white/10 bg-white/6 px-5 py-5">
-                  <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                    Fast actions
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleRefresh}
-                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm text-slate-100 transition hover:border-cyan-300/30 hover:text-cyan-100"
-                  >
-                    <RefreshCw size={16} />
-                    Refresh now
-                  </button>
-                </div>
-              </div>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#0f141a_0%,#131b22_100%)] text-slate-100">
+      <div className="mx-auto flex w-full max-w-[1540px] flex-col gap-6 px-4 py-5 lg:px-6">
+        <header className="flex flex-col gap-4 border-b border-white/8 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-sm text-slate-300">
+              <ShieldCheck size={16} className="text-emerald-300" />
+              <span>Registry control plane</span>
+              <span className="text-slate-500">/</span>
+              <span>fleet health, recent activity, tenancy visibility</span>
             </div>
-          </section>
-
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricBar
-              label="Total agents"
-              value={metrics.agentCount || agents.length}
-              accent="cyan"
-              detail="Discovered in the registry catalog"
-            />
-            <MetricBar
-              label="Healthy"
-              value={healthyAgents}
-              accent="emerald"
-              detail="Passing health checks"
-            />
-            <MetricBar
-              label="Unhealthy"
-              value={unhealthyAgents}
-              accent="rose"
-              detail="Need operator attention"
-            />
-            <MetricBar
-              label="Searches"
-              value={metrics.searches}
-              accent="blue"
-              detail={`${metrics.heartbeats} heartbeats tracked`}
-            />
-          </section>
-
-          <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-            <div className="space-y-6">
-              <div className="glass-panel rounded-[34px] border border-white/10 p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                      Fleet filter
-                    </p>
-                    <h3 className="mesh-display mt-2 text-2xl font-bold text-white">
-                      Slice the mesh by health
-                    </h3>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {(['all', 'healthy', 'unhealthy'] as const).map((filter) => (
-                      <button
-                        key={filter}
-                        type="button"
-                        onClick={() => setStatusFilter(filter)}
-                        className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                          statusFilter === filter
-                            ? 'border-cyan-300/40 bg-cyan-300/14 text-cyan-50'
-                            : 'border-white/10 bg-white/5 text-slate-200 hover:border-cyan-300/20 hover:text-cyan-100'
-                        }`}
-                      >
-                        {filter[0].toUpperCase() + filter.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {view === 'overview' ? (
-                <AgentGrid
-                  agents={filteredAgents}
-                  loading={loading}
-                  error={error}
-                  selectedAgentId={selectedAgent?.id ?? null}
-                  onSelect={setSelectedAgent}
-                />
-              ) : null}
-
-              {view === 'topology' ? (
-                <TopologyGraph
-                  agents={filteredAgents}
-                  selectedAgentId={selectedAgent?.id ?? null}
-                  onSelect={setSelectedAgent}
-                />
-              ) : null}
-
-              {view === 'stream' ? (
-                <TaskStream
-                  tasks={tasks}
-                  loading={tasksLoading}
-                  error={tasksError}
-                  connected={taskStreamConnected}
-                  selectedAgentId={selectedAgent?.id ?? null}
-                />
-              ) : null}
+            <div>
+              <h1 className="mesh-display text-3xl font-semibold text-white">
+                a2a-mesh operator console
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Discovery, health, task activity, and topology in one surface. This view prefers
+                operator answers over demo gloss.
+              </p>
             </div>
+          </div>
 
-            <div className="space-y-6">
-              <section className="glass-panel rounded-[34px] border border-white/10 p-6 shadow-[0_30px_80px_rgba(2,8,23,0.35)]">
-                <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={classNames(
+                'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium',
+                accessMode === 'authenticated'
+                  ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
+                  : 'border-amber-400/30 bg-amber-400/10 text-amber-100',
+              )}
+            >
+              {accessMode === 'authenticated' ? <Lock size={14} /> : <Globe2 size={14} />}
+              {accessMode === 'authenticated' ? 'Operator mode' : 'Public discovery mode'}
+            </span>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition hover:border-cyan-300/30 hover:text-cyan-100"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
+        </header>
+
+        {accessMode !== 'authenticated' ? (
+          <section className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            Live task feeds and admin actions are hidden until the registry is reached with operator
+            authentication. Public agents remain visible for discovery.
+          </section>
+        ) : null}
+
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <MetricTile
+            label="Fleet"
+            value={metrics.agentCount || agents.length}
+            detail="registered agents"
+          />
+          <MetricTile
+            label="Healthy"
+            value={metrics.healthyAgents}
+            detail="passing health checks"
+            accent="emerald"
+          />
+          <MetricTile
+            label="Degraded"
+            value={metrics.unhealthyAgents}
+            detail="need operator attention"
+            accent="rose"
+          />
+          <MetricTile
+            label="Active tasks"
+            value={activeTaskCount}
+            detail="recent active work"
+            accent="cyan"
+          />
+          <MetricTile
+            label="Tenants"
+            value={metrics.activeTenants}
+            detail="visible namespaces"
+            accent="amber"
+          />
+        </section>
+
+        <section className="flex flex-col gap-4 border-b border-white/8 pb-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
+            <label className="relative max-w-xl flex-1">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+              />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name, skill, tag, or tenant"
+                className="w-full rounded-lg border border-white/10 bg-slate-950/45 py-2.5 pl-9 pr-3 text-sm text-slate-100 outline-none transition focus:border-cyan-300/35"
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {(['all', 'healthy', 'unhealthy', 'unknown'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setStatusFilter(filter)}
+                  className={classNames(
+                    'rounded-lg border px-3 py-2 text-sm transition',
+                    statusFilter === filter
+                      ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100'
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20',
+                  )}
+                >
+                  {filter[0].toUpperCase() + filter.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={capabilityFilter}
+              onChange={(event) => setCapabilityFilter(event.target.value as CapabilityFilter)}
+              className="rounded-lg border border-white/10 bg-slate-950/45 px-3 py-2 text-sm text-slate-100 outline-none"
+            >
+              <option value="all">All capabilities</option>
+              <option value="streaming">Streaming</option>
+              <option value="mcp">MCP compatible</option>
+            </select>
+            <select
+              value={tenantFilter}
+              onChange={(event) => setTenantFilter(event.target.value)}
+              className="rounded-lg border border-white/10 bg-slate-950/45 px-3 py-2 text-sm text-slate-100 outline-none"
+            >
+              <option value="all">All tenants</option>
+              <option value="unassigned">Unassigned</option>
+              {tenants.map((tenant) => (
+                <option key={tenant} value={tenant}>
+                  {tenant}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
+              <ViewButton
+                active={view === 'fleet'}
+                label="Fleet Overview"
+                onClick={() => setView('fleet')}
+              />
+              <ViewButton
+                active={view === 'topology'}
+                label="Live Topology"
+                onClick={() => setView('topology')}
+              />
+              <ViewButton
+                active={view === 'stream'}
+                label="Task Stream"
+                onClick={() => setView('stream')}
+              />
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_420px]">
+          <main className="min-w-0 space-y-6">
+            {view === 'fleet' ? (
+              <section className="overflow-hidden rounded-lg border border-white/10 bg-[#111820]">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-100">
-                      Inspector
+                    <h2 className="text-sm font-semibold text-white">Fleet table</h2>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {filteredAgents.length} visible agents, {tasks.length} recent task events
                     </p>
-                    <h3 className="mesh-display mt-2 text-3xl font-bold text-white">
-                      {selectedAgent?.card.name ?? 'Select an agent'}
-                    </h3>
                   </div>
-                  {selectedAgent ? <HealthBadge status={selectedAgent.status} /> : null}
+                  <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+                    <Workflow size={14} />
+                    {taskStreamConnected ? 'Live task feed connected' : 'Task feed polling'}
+                  </span>
                 </div>
 
-                {selectedAgent ? (
-                  <>
-                    <p className="mt-4 text-sm leading-7 text-slate-200/85">
-                      {selectedAgent.card.description}
-                    </p>
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4">
-                        <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                          URL
-                        </p>
-                        <p className="mt-2 break-all text-sm text-slate-100">{selectedAgent.url}</p>
-                      </div>
-                      <div className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4">
-                        <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                          Capabilities
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {selectedAgent.card.capabilities?.streaming ? (
-                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">
-                              streaming
-                            </span>
-                          ) : null}
-                          {selectedAgent.card.capabilities?.pushNotifications ? (
-                            <span className="rounded-full border border-blue-300/20 bg-blue-300/10 px-3 py-1 text-xs text-blue-100">
-                              push
-                            </span>
-                          ) : null}
-                          {selectedAgent.card.capabilities?.mcpCompatible ? (
-                            <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-1 text-xs text-violet-100">
-                              MCP
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 rounded-[26px] border border-white/10 bg-white/5 px-4 py-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                            Recent task activity
-                          </p>
-                          <p className="mt-2 text-sm text-slate-100">
-                            {selectedAgentTasks.length} events in the recent control-plane window
-                          </p>
-                        </div>
-                        <Cpu size={18} className="text-cyan-200" />
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {(selectedAgent.card.skills ?? []).map((skill) => (
-                        <span
-                          key={skill.id}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-100"
-                        >
-                          {skill.name}
-                        </span>
-                      ))}
-                    </div>
-                  </>
+                {loading ? (
+                  <EmptyState title="Loading fleet" body="Fetching the latest registry state." />
+                ) : error && filteredAgents.length === 0 ? (
+                  <ErrorState title="Registry unavailable" body={error} />
+                ) : filteredAgents.length === 0 ? (
+                  <EmptyState
+                    title="No matching agents"
+                    body="Try clearing one of the filters or register a public agent."
+                  />
                 ) : (
-                  <div className="mt-6 rounded-[28px] border border-dashed border-white/15 px-5 py-12 text-center text-slate-300">
-                    Pick an agent from the grid or topology graph to inspect it here.
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-white/8 text-sm">
+                      <thead className="bg-white/4 text-left text-xs uppercase tracking-[0.18em] text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Agent</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Tenant</th>
+                          <th className="px-4 py-3">Transport</th>
+                          <th className="px-4 py-3">Last success</th>
+                          <th className="px-4 py-3">Heartbeat drift</th>
+                          <th className="px-4 py-3">Recent tasks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/6">
+                        {filteredAgents.map((agent) => {
+                          const agentTasks = tasks.filter((task) => task.agentId === agent.id);
+                          const activeTasks = agentTasks.filter((task) =>
+                            [
+                              'submitted',
+                              'queued',
+                              'working',
+                              'input-required',
+                              'waiting_on_external',
+                            ].includes(task.status),
+                          ).length;
+                          return (
+                            <tr
+                              key={agent.id}
+                              className={classNames(
+                                'cursor-pointer transition hover:bg-white/4',
+                                selectedAgent?.id === agent.id && 'bg-cyan-300/8',
+                              )}
+                              onClick={() => setSelectedAgentId(agent.id)}
+                            >
+                              <td className="px-4 py-3">
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-0.5 rounded-md border border-white/10 bg-white/5 p-2">
+                                    <Bot size={16} className="text-cyan-200" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-white">
+                                        {agent.card.name}
+                                      </span>
+                                      {agent.isPublic ? (
+                                        <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-emerald-100">
+                                          public
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-xs text-slate-400">
+                                      {agent.card.description}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <HealthBadge status={agent.status} />
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {agent.tenantId ?? 'unassigned'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {agent.card.transport ?? 'http'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {formatRelativeTime(agent.lastSuccessAt)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {formatRelativeTime(agent.lastHeartbeatAt)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-300">
+                                {activeTasks > 0
+                                  ? `${activeTasks} active`
+                                  : `${agentTasks.length} recent`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </section>
+            ) : null}
 
-              {view !== 'stream' ? (
-                <TaskStream
-                  tasks={tasks}
-                  loading={tasksLoading}
-                  error={tasksError}
-                  connected={taskStreamConnected}
-                  selectedAgentId={selectedAgent?.id ?? null}
-                />
-              ) : null}
+            {view === 'topology' ? (
+              <TopologyGraph
+                agents={filteredAgents}
+                selectedAgentId={selectedAgent?.id ?? null}
+                onSelect={(agent) => setSelectedAgentId(agent.id)}
+              />
+            ) : null}
 
-              {error ? (
-                <section className="glass-panel rounded-[30px] border border-rose-300/25 p-5 text-rose-100">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle size={18} />
-                    Registry connectivity warning
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-rose-100/85">{error}</p>
-                </section>
-              ) : null}
+            {view === 'stream' ? (
+              <TaskStream
+                tasks={tasks}
+                loading={tasksLoading}
+                error={tasksError}
+                connected={taskStreamConnected}
+                selectedAgentId={selectedAgent?.id ?? null}
+              />
+            ) : null}
+          </main>
 
-              <section className="glass-panel rounded-[30px] border border-white/10 p-5">
-                <p className="text-[11px] uppercase tracking-[0.28em] text-slate-400">
-                  Registry summary
-                </p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-                    <p className="text-sm text-slate-300">Registrations</p>
-                    <p className="mt-2 mesh-display text-3xl font-bold text-white">
-                      {metrics.registrations}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-                    <p className="text-sm text-slate-300">Active tenants</p>
-                    <p className="mt-2 mesh-display text-3xl font-bold text-white">
-                      {metrics.activeTenants}
-                    </p>
-                  </div>
+          <aside className="space-y-6">
+            <section className="rounded-lg border border-white/10 bg-[#111820] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                    Selected agent
+                  </p>
+                  <h2 className="mt-2 text-lg font-semibold text-white">
+                    {selectedAgent?.card.name ?? 'No agent selected'}
+                  </h2>
                 </div>
-                <a
-                  href="http://localhost:3099/agents"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex items-center gap-2 text-sm text-cyan-100 hover:text-cyan-50"
-                >
-                  Open raw registry API
-                  <ArrowUpRight size={16} />
-                </a>
-              </section>
-            </div>
-          </section>
-        </main>
+                {selectedAgent ? <HealthBadge status={selectedAgent.status} /> : null}
+              </div>
+
+              {selectedAgent ? (
+                <>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {selectedAgent.card.description}
+                  </p>
+                  <dl className="mt-4 grid gap-3 text-sm">
+                    <InfoRow label="URL" value={selectedAgent.url} />
+                    <InfoRow label="Tenant" value={selectedAgent.tenantId ?? 'unassigned'} />
+                    <InfoRow label="Transport" value={selectedAgent.card.transport ?? 'http'} />
+                    <InfoRow
+                      label="Registered"
+                      value={formatRelativeTime(selectedAgent.registeredAt)}
+                    />
+                    <InfoRow
+                      label="Last heartbeat"
+                      value={formatRelativeTime(selectedAgent.lastHeartbeatAt)}
+                    />
+                    <InfoRow
+                      label="Last success"
+                      value={formatRelativeTime(selectedAgent.lastSuccessAt)}
+                    />
+                    <InfoRow
+                      label="Consecutive failures"
+                      value={String(selectedAgent.consecutiveFailures ?? 0)}
+                    />
+                  </dl>
+
+                  <div className="mt-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                      Capabilities
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(selectedAgent.card.capabilities?.streaming ?? false) ? (
+                        <CapabilityPill label="streaming" />
+                      ) : null}
+                      {(selectedAgent.card.capabilities?.pushNotifications ?? false) ? (
+                        <CapabilityPill label="push" />
+                      ) : null}
+                      {(selectedAgent.card.capabilities?.mcpCompatible ?? false) ? (
+                        <CapabilityPill label="mcp" />
+                      ) : null}
+                      {(selectedAgent.card.capabilities?.backgroundJobs ?? false) ? (
+                        <CapabilityPill label="background jobs" />
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Skills</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(selectedAgent.card.skills ?? []).length > 0 ? (
+                        (selectedAgent.card.skills ?? []).map((skill) => (
+                          <span
+                            key={skill.id}
+                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-100"
+                          >
+                            {skill.name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400">No declared skills.</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <EmptyState
+                  title="No selection"
+                  body="Pick a fleet row or topology node to inspect transport, drift, and recent task activity."
+                />
+              )}
+            </section>
+
+            <section className="rounded-lg border border-white/10 bg-[#111820] p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+                    Recent activity
+                  </p>
+                  <h3 className="mt-2 text-base font-semibold text-white">Task summary</h3>
+                </div>
+                <span className="text-xs text-slate-400">
+                  {selectedAgent ? `${selectedAgentTasks.length} events` : `${tasks.length} events`}
+                </span>
+              </div>
+
+              {tasksLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading task activity…</p>
+              ) : tasksError ? (
+                <p className="mt-4 text-sm text-amber-100">{tasksError}</p>
+              ) : (selectedAgent ? selectedAgentTasks : tasks).length === 0 ? (
+                <EmptyState
+                  title="No recent tasks"
+                  body="This agent has no task events in the current registry window."
+                  compact
+                />
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {(selectedAgent ? selectedAgentTasks : tasks).slice(0, 6).map((task) => (
+                    <article
+                      key={`${task.agentId}-${task.taskId}`}
+                      className="rounded-lg border border-white/8 bg-black/15 px-3 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium text-white">{task.agentName}</span>
+                        <span className="text-xs text-slate-400">
+                          {formatRelativeTime(task.updatedAt)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-300">
+                        {task.summary ?? 'Task event captured without a text summary.'}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                        <span>{task.status}</span>
+                        <span>{task.historyCount} messages</span>
+                        <span>{task.artifactCount} artifacts</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {error ? (
+              <ErrorState title="Registry connectivity warning" body={error} compact />
+            ) : null}
+          </aside>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  detail,
+  accent = 'cyan',
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  accent?: 'cyan' | 'emerald' | 'rose' | 'amber';
+}) {
+  const accents = {
+    cyan: 'border-cyan-300/20',
+    emerald: 'border-emerald-300/20',
+    rose: 'border-rose-300/20',
+    amber: 'border-amber-300/20',
+  } as const;
+
+  return (
+    <div className={classNames('rounded-lg border bg-[#111820] px-4 py-4', accents[accent])}>
+      <p className="text-xs uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
+      <p className="mt-1 text-sm text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function ViewButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={classNames(
+        'rounded-md px-3 py-2 text-sm transition',
+        active
+          ? 'bg-cyan-300/14 text-cyan-100'
+          : 'text-slate-300 hover:bg-white/6 hover:text-white',
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CapabilityPill({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">
+      {label}
+    </span>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3">
+      <dt className="text-slate-400">{label}</dt>
+      <dd className="break-all text-slate-100">{value}</dd>
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  body,
+  compact = false,
+}: {
+  title: string;
+  body: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={classNames(
+        'flex flex-col items-center justify-center text-center text-slate-400',
+        compact ? 'px-2 py-4' : 'px-6 py-16',
+      )}
+    >
+      <Activity size={compact ? 18 : 24} className="mb-3 text-slate-500" />
+      <p className="text-sm font-medium text-slate-200">{title}</p>
+      <p className="mt-2 max-w-md text-sm leading-6">{body}</p>
+    </div>
+  );
+}
+
+function ErrorState({
+  title,
+  body,
+  compact = false,
+}: {
+  title: string;
+  body: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={classNames(
+        'rounded-lg border border-rose-400/20 bg-rose-400/10 text-rose-100',
+        compact ? 'px-3 py-3' : 'px-6 py-16 text-center',
+      )}
+    >
+      <div className={classNames('flex items-center gap-2', compact ? '' : 'justify-center')}>
+        <AlertTriangle size={16} />
+        <span className="font-medium">{title}</span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-rose-100/85">{body}</p>
     </div>
   );
 }

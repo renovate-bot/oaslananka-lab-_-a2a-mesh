@@ -4,18 +4,24 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
+import type { Server as HttpServer } from 'node:http';
 import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 import {
+  attachRequestContext,
+  createAnonymousRequestContext,
   logger,
   normalizeAgentCard,
   validateSafeUrl,
   fetchWithPolicy,
+  getRequestContext,
+  JwtAuthMiddleware,
   type AgentCard,
+  type JwtAuthMiddlewareOptions,
+  type RequestContext,
   type Task,
 } from 'a2a-mesh';
-import { SkillMatcher } from './SkillMatcher.js';
 import { InMemoryStorage } from './storage/InMemoryStorage.js';
 import type { IAgentStorage, RegisteredAgent } from './storage/IAgentStorage.js';
 
@@ -23,10 +29,24 @@ export interface RegistryServerOptions {
   storage?: IAgentStorage;
   requireAuth?: boolean;
   registrationToken?: string;
+  auth?: JwtAuthMiddlewareOptions;
   allowLocalhost?: boolean;
   allowPrivateNetworks?: boolean;
+  allowUnresolvedHostnames?: boolean;
+  allowedOrigins?: string[];
+  requireOrigin?: boolean;
+  bodyLimit?: string;
   taskPollingIntervalMs?: number;
   maxRecentTasks?: number;
+  healthPollingIntervalMs?: number;
+  healthCheckBatchSize?: number;
+  taskPollingBatchSize?: number;
+  healthCheckConcurrency?: number;
+  taskPollingConcurrency?: number;
+  healthyRecheckIntervalMs?: number;
+  unhealthyRecheckIntervalMs?: number;
+  unknownRecheckIntervalMs?: number;
+  taskPollCooldownMs?: number;
 }
 
 /**
@@ -34,10 +54,6 @@ export interface RegistryServerOptions {
  *
  * @since 1.0.0
  */
-interface RequestWithAuth extends Request {
-  tenantId?: string;
-}
-
 export interface RegistryMetricsSummary {
   registrations: number;
   searches: number;
@@ -71,9 +87,16 @@ export class RegistryServer {
   private readonly taskEvents = new EventEmitter();
   private pingInterval: NodeJS.Timeout | null = null;
   private taskPollInterval: NodeJS.Timeout | null = null;
+  private httpServer: HttpServer | undefined;
+  private readonly sseClients = new Set<Response>();
+  private readonly authMiddleware: JwtAuthMiddleware | undefined;
   private readonly options: RegistryServerOptions;
   private readonly recentTasks = new Map<string, RegistryTaskEvent>();
   private readonly taskVersions = new Map<string, string>();
+  private healthCursor: string | null = null;
+  private taskCursor: string | null = null;
+  private readonly nextHealthCheckAt = new Map<string, number>();
+  private readonly nextTaskPollAt = new Map<string, number>();
   private metrics = {
     registrations: 0,
     searches: 0,
@@ -83,8 +106,17 @@ export class RegistryServer {
   constructor(options: RegistryServerOptions = {}) {
     this.options = options;
     this.app = express();
-    this.app.use(cors());
-    this.app.use(express.json());
+    this.authMiddleware = options.auth ? new JwtAuthMiddleware(options.auth) : undefined;
+    this.app.use(this.createCorsMiddleware());
+    this.app.use(express.json({ limit: options.bodyLimit ?? '1mb' }));
+    this.app.use((req, res, next) => {
+      attachRequestContext(req, createAnonymousRequestContext(req));
+      if (!this.isOriginAllowed(req)) {
+        res.status(403).json({ error: 'Forbidden origin' });
+        return;
+      }
+      next();
+    });
     this.store = options.storage ?? new InMemoryStorage();
 
     this.setupRoutes();
@@ -92,11 +124,11 @@ export class RegistryServer {
 
   private setupRoutes() {
     this.app.get('/health', async (_req, res) => {
-      const agents = await this.store.getAll();
+      const agents = await this.store.summarize();
       res.json({
         status: 'ok',
-        agents: agents.length,
-        healthyAgents: agents.filter((agent) => agent.status === 'healthy').length,
+        agents: agents.agentCount,
+        healthyAgents: agents.healthyAgents,
       });
     });
 
@@ -135,7 +167,10 @@ export class RegistryServer {
       res.json(await this.getMetricsSummary());
     });
 
-    this.app.get('/events', (_req: Request, res: Response) => {
+    this.app.get('/events', async (req: Request, res: Response) => {
+      if (await this.rejectUnauthenticatedControlPlane(req, res)) {
+        return;
+      }
       this.configureSse(res);
       const listener = (payload: unknown) => {
         res.write(`event: registry_update\ndata: ${JSON.stringify(payload)}\n\n`);
@@ -146,7 +181,10 @@ export class RegistryServer {
       });
     });
 
-    this.app.get('/agents/stream', (_req: Request, res: Response) => {
+    this.app.get('/agents/stream', async (req: Request, res: Response) => {
+      if (await this.rejectUnauthenticatedControlPlane(req, res)) {
+        return;
+      }
       this.configureSse(res);
 
       const listener = (payload: unknown) => {
@@ -163,13 +201,10 @@ export class RegistryServer {
       });
     });
 
-    this.app.post('/agents/register', async (req, res) => {
-      if (this.options.requireAuth && this.options.registrationToken) {
-        const authHeader = req.headers.authorization;
-        if (authHeader !== `Bearer ${this.options.registrationToken}`) {
-          res.status(401).json({ error: 'Unauthorized' });
-          return;
-        }
+    const registerAgent = async (req: Request, res: Response) => {
+      const requestContext = await this.authenticateControlPlane(req, res);
+      if (!requestContext) {
+        return;
       }
 
       const body = req.body as {
@@ -188,6 +223,7 @@ export class RegistryServer {
         await validateSafeUrl(agentUrl, {
           allowLocalhost: this.options.allowLocalhost ?? false,
           allowPrivateNetworks: this.options.allowPrivateNetworks ?? false,
+          allowUnresolvedHostnames: this.options.allowUnresolvedHostnames ?? false,
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -195,7 +231,7 @@ export class RegistryServer {
         return;
       }
 
-      const authTenantId = (req as RequestWithAuth).tenantId;
+      const authTenantId = requestContext.tenantId;
       const finalTenantId = authTenantId ?? tenantId;
 
       const registered = await this.store.upsert(
@@ -212,19 +248,42 @@ export class RegistryServer {
         ...(finalTenantId ? { tenantId: finalTenantId } : {}),
       });
       res.status(201).json(registered);
-    });
+    };
+    this.app.post('/agents/register', registerAgent);
+    this.app.post('/admin/agents/register', registerAgent);
 
     this.app.get('/agents', async (req, res) => {
-      const authTenantId = (req as RequestWithAuth).tenantId;
-      let all = await this.store.getAll();
-
-      if (authTenantId) {
-        all = all.filter((a) => a.isPublic || !a.tenantId || a.tenantId === authTenantId);
+      if (req.query.public === 'true') {
+        const result = await this.store.list({
+          isPublic: true,
+          limit: Number.MAX_SAFE_INTEGER,
+        });
+        res.json(result.items);
+        return;
       }
-      res.json(all);
+
+      const requestContext = await this.authenticateControlPlane(req, res);
+      if (!requestContext) {
+        return;
+      }
+
+      const result = await this.store.list({
+        ...(requestContext.tenantId
+          ? { tenantId: requestContext.tenantId, includePublic: true }
+          : {}),
+        limit: Number.MAX_SAFE_INTEGER,
+      });
+      res.json(
+        this.shouldEnforceTenantIsolation(requestContext)
+          ? this.filterAgentsByContext(result.items, requestContext)
+          : result.items,
+      );
     });
 
     this.app.get('/tasks/recent', async (req, res) => {
+      if (await this.rejectUnauthenticatedControlPlane(req, res)) {
+        return;
+      }
       if (this.recentTasks.size === 0) {
         await this.refreshTaskSnapshots();
       }
@@ -238,7 +297,10 @@ export class RegistryServer {
       res.json(this.getRecentTasks(limit));
     });
 
-    this.app.get('/tasks/stream', async (_req, res) => {
+    this.app.get('/tasks/stream', async (req, res) => {
+      if (await this.rejectUnauthenticatedControlPlane(req, res)) {
+        return;
+      }
       this.configureSse(res);
 
       for (const taskEvent of this.getRecentTasks(10)) {
@@ -277,38 +339,82 @@ export class RegistryServer {
       }
 
       this.metrics.searches += 1;
-
-      const authTenantId = (req as RequestWithAuth).tenantId;
-      let all = await this.store.getAll();
-
-      if (authTenantId) {
-        all = all.filter((a) => a.isPublic || !a.tenantId || a.tenantId === authTenantId);
-      }
-
-      const matches = SkillMatcher.match(all, {
+      const query = {
         ...(skill ? { skill } : {}),
         ...(tag ? { tag } : {}),
         ...(name ? { name } : {}),
         ...(transport ? { transport } : {}),
         ...(status ? { status } : {}),
         ...(mcpCompatible !== undefined ? { mcpCompatible } : {}),
+        limit: Number.MAX_SAFE_INTEGER,
+      } as const;
+
+      if (req.query.public === 'true') {
+        res.json((await this.store.list({ ...query, isPublic: true })).items);
+        return;
+      }
+
+      const requestContext = await this.authenticateControlPlane(req, res);
+      if (!requestContext) {
+        return;
+      }
+
+      const matches = await this.store.list({
+        ...query,
+        ...(requestContext.tenantId
+          ? { tenantId: requestContext.tenantId, includePublic: true }
+          : {}),
       });
-      res.json(matches);
+      res.json(
+        this.shouldEnforceTenantIsolation(requestContext)
+          ? this.filterAgentsByContext(matches.items, requestContext)
+          : matches.items,
+      );
     });
 
     this.app.get('/agents/:id', async (req, res) => {
-      const agent = await this.store.get(req.params.id);
+      const agentId = req.params.id;
+      if (!agentId) {
+        res.status(400).json({ error: 'Missing agent id' });
+        return;
+      }
+
+      const agent = await this.store.get(agentId);
       if (!agent) {
         res.status(404).json({ error: 'Agent not found' });
         return;
       }
+      if (!agent.isPublic) {
+        const requestContext = await this.authenticateControlPlane(req, res);
+        if (!requestContext) {
+          return;
+        }
+        if (!this.canAccessAgent(agent, requestContext)) {
+          res.status(403).json({ error: 'Forbidden' });
+          return;
+        }
+      }
       res.json(agent);
     });
 
-    this.app.post('/agents/:id/heartbeat', async (req, res) => {
-      const agent = await this.store.get(req.params.id);
+    const heartbeatAgent = async (req: Request, res: Response) => {
+      const agentId = req.params.id;
+      if (!agentId) {
+        res.status(400).json({ error: 'Missing agent id' });
+        return;
+      }
+
+      const requestContext = await this.authenticateControlPlane(req, res);
+      if (!requestContext) {
+        return;
+      }
+      const agent = await this.store.get(agentId);
       if (!agent) {
         res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+      if (!this.canAccessAgent(agent, requestContext)) {
+        res.status(403).json({ error: 'Forbidden' });
         return;
       }
 
@@ -320,42 +426,60 @@ export class RegistryServer {
         lastSuccessAt: new Date().toISOString(),
       };
       await this.store.upsert(updated);
+      this.nextHealthCheckAt.set(
+        updated.id,
+        Date.now() + (this.options.healthyRecheckIntervalMs ?? 30_000),
+      );
       this.metrics.heartbeats += 1;
       this.emitRegistryEvent({ type: 'heartbeat', agent: updated });
       res.json(updated);
-    });
+    };
+    this.app.post('/agents/:id/heartbeat', heartbeatAgent);
+    this.app.post('/admin/agents/:id/heartbeat', heartbeatAgent);
 
-    this.app.delete('/agents/:id', async (req, res) => {
-      if (this.options.requireAuth && this.options.registrationToken) {
-        const authHeader = req.headers.authorization;
-        if (authHeader !== `Bearer ${this.options.registrationToken}`) {
-          res.status(401).json({ error: 'Unauthorized' });
-          return;
-        }
+    const deleteAgent = async (req: Request, res: Response) => {
+      const agentId = req.params.id;
+      if (!agentId) {
+        res.status(400).json({ error: 'Missing agent id' });
+        return;
       }
 
-      const deleted = await this.store.delete(req.params.id);
+      const requestContext = await this.authenticateControlPlane(req, res);
+      if (!requestContext) {
+        return;
+      }
+
+      const agent = await this.store.get(agentId);
+      if (!agent) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+      if (!this.canAccessAgent(agent, requestContext)) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+      const deleted = await this.store.delete(agentId);
       if (!deleted) {
         res.status(404).json({ error: 'Agent not found' });
         return;
       }
-      const tenantIdStr = (req as RequestWithAuth).tenantId;
-      logger.audit('delete_agent', tenantIdStr, `agent:${req.params.id}`, 'success');
-      this.purgeAgentTaskState(req.params.id);
-      this.emitRegistryEvent({ type: 'deleted', id: req.params.id });
+      const tenantIdStr = requestContext.tenantId;
+      logger.audit('delete_agent', tenantIdStr, `agent:${agentId}`, 'success');
+      this.purgeAgentTaskState(agentId);
+      this.emitRegistryEvent({ type: 'deleted', id: agentId });
       res.status(204).send();
-    });
+    };
+    this.app.delete('/agents/:id', deleteAgent);
+    this.app.delete('/admin/agents/:id', deleteAgent);
   }
 
   private async executeHealthChecks(agents: RegisteredAgent[]) {
-    // Concurrency limit logic: process agents in chunks to avoid thundering herd and network socket exhaustion
-    const CONCURRENCY_LIMIT = 5;
-    for (let i = 0; i < agents.length; i += CONCURRENCY_LIMIT) {
-      const chunk = agents.slice(i, i + CONCURRENCY_LIMIT);
+    const concurrencyLimit = this.options.healthCheckConcurrency ?? 5;
+    for (let i = 0; i < agents.length; i += concurrencyLimit) {
+      const chunk = agents.slice(i, i + concurrencyLimit);
 
       await Promise.all(
         chunk.map(async (agent) => {
-          // Adding Jitter so that multiple agents don't get pinged exactly at the same millisecond
           const jitterMs = Math.random() * 500;
           await new Promise((resolve) => setTimeout(resolve, jitterMs));
 
@@ -365,6 +489,7 @@ export class RegistryServer {
               validatedUrl = await validateSafeUrl(this.buildAgentUrl(agent.url, '/health'), {
                 allowLocalhost: this.options.allowLocalhost ?? false,
                 allowPrivateNetworks: this.options.allowPrivateNetworks ?? false,
+                allowUnresolvedHostnames: this.options.allowUnresolvedHostnames ?? false,
               });
             } catch (e: unknown) {
               throw new Error('Unsafe URL during health check', { cause: e });
@@ -388,9 +513,20 @@ export class RegistryServer {
               consecutiveFailures,
               ...(lastSuccessAt ? { lastSuccessAt } : {}),
             });
+            this.scheduleNextHealthCheck({
+              ...agent,
+              status,
+              consecutiveFailures,
+              ...(lastSuccessAt ? { lastSuccessAt } : {}),
+            });
           } catch (error) {
             const consecutiveFailures = (agent.consecutiveFailures ?? 0) + 1;
             await this.store.updateStatus(agent.id, 'unhealthy', { consecutiveFailures });
+            this.scheduleNextHealthCheck({
+              ...agent,
+              status: 'unhealthy',
+              consecutiveFailures,
+            });
             logger.warn('Agent unreachable', {
               agentId: agent.id,
               error: String(error),
@@ -405,16 +541,27 @@ export class RegistryServer {
   private startHealthChecks() {
     this.pingInterval = setInterval(async () => {
       try {
-        const agents = await this.store.getAll();
-        await this.executeHealthChecks(agents);
+        const result = await this.store.list({
+          cursor: this.healthCursor ?? undefined,
+          limit: this.options.healthCheckBatchSize ?? 50,
+        });
+        this.healthCursor = result.nextCursor;
+        await this.executeHealthChecks(
+          result.items.filter((agent) => this.isHealthCheckDue(agent)),
+        );
       } catch (err) {
         logger.error('Failed to run health checks', { error: String(err) });
       }
-    }, 30_000);
+    }, this.options.healthPollingIntervalMs ?? 30_000);
   }
 
   private async refreshTaskSnapshots(): Promise<void> {
-    const agents = await this.store.getAll();
+    const result = await this.store.list({
+      cursor: this.taskCursor ?? undefined,
+      limit: this.options.taskPollingBatchSize ?? 50,
+    });
+    this.taskCursor = result.nextCursor;
+    const agents = result.items.filter((agent) => this.isTaskPollDue(agent));
     if (agents.length === 0) {
       return;
     }
@@ -423,7 +570,7 @@ export class RegistryServer {
   }
 
   private async executeTaskPolling(agents: RegisteredAgent[]) {
-    const concurrencyLimit = 5;
+    const concurrencyLimit = this.options.taskPollingConcurrency ?? 5;
 
     for (let index = 0; index < agents.length; index += concurrencyLimit) {
       const chunk = agents.slice(index, index + concurrencyLimit);
@@ -436,6 +583,7 @@ export class RegistryServer {
       const validatedUrl = await validateSafeUrl(this.buildAgentUrl(agent.url, '/tasks?limit=20'), {
         allowLocalhost: this.options.allowLocalhost ?? false,
         allowPrivateNetworks: this.options.allowPrivateNetworks ?? false,
+        allowUnresolvedHostnames: this.options.allowUnresolvedHostnames ?? false,
       });
       const response = await fetchWithPolicy(validatedUrl.toString(), undefined, {
         timeoutMs: 5_000,
@@ -461,7 +609,9 @@ export class RegistryServer {
         this.trimRecentTasks();
         this.taskEvents.emit('task_updated', taskEvent);
       }
+      this.scheduleNextTaskPoll(agent);
     } catch (error) {
+      this.scheduleNextTaskPoll(agent);
       logger.debug('Skipping task poll for agent', {
         agentId: agent.id,
         error: String(error),
@@ -480,22 +630,195 @@ export class RegistryServer {
     }, intervalMs);
   }
 
+  private isHealthCheckDue(agent: RegisteredAgent): boolean {
+    return (this.nextHealthCheckAt.get(agent.id) ?? 0) <= Date.now();
+  }
+
+  private scheduleNextHealthCheck(agent: RegisteredAgent): void {
+    const intervalMs =
+      agent.status === 'healthy'
+        ? (this.options.healthyRecheckIntervalMs ?? 30_000)
+        : agent.status === 'unhealthy'
+          ? (this.options.unhealthyRecheckIntervalMs ?? 60_000)
+          : (this.options.unknownRecheckIntervalMs ?? 15_000);
+    this.nextHealthCheckAt.set(agent.id, Date.now() + intervalMs);
+  }
+
+  private isTaskPollDue(agent: RegisteredAgent): boolean {
+    return (this.nextTaskPollAt.get(agent.id) ?? 0) <= Date.now();
+  }
+
+  private scheduleNextTaskPoll(agent: RegisteredAgent): void {
+    const baseIntervalMs = this.options.taskPollCooldownMs ?? 5_000;
+    const multiplier = agent.status === 'unhealthy' ? 3 : 1;
+    this.nextTaskPollAt.set(agent.id, Date.now() + baseIntervalMs * multiplier);
+  }
+
   public start(port: number) {
     this.startHealthChecks();
     this.startTaskPolling();
     void this.refreshTaskSnapshots();
-    return this.app.listen(port, () => {
+    this.httpServer = this.app.listen(port, () => {
       logger.info('Registry Server listening', { port });
     });
+    return this.httpServer;
   }
 
-  public stop() {
+  public async stop(): Promise<void> {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
     if (this.taskPollInterval) {
       clearInterval(this.taskPollInterval);
+      this.taskPollInterval = null;
     }
+    for (const client of this.sseClients) {
+      try {
+        client.end();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.sseClients.clear();
+    if (this.httpServer) {
+      await new Promise<void>((resolve, reject) => {
+        this.httpServer?.close((error?: Error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }).catch((error: unknown) => {
+        if (!(error instanceof Error) || !error.message.includes('Server is not running')) {
+          throw error;
+        }
+      });
+      this.httpServer = undefined;
+    }
+  }
+
+  private createCorsMiddleware() {
+    return cors({
+      origin: (origin, callback) => {
+        callback(null, origin ? this.isOriginValueAllowed(origin) : true);
+      },
+    });
+  }
+
+  private isOriginAllowed(req: Request): boolean {
+    const origin = req.header('origin');
+    if (!origin) {
+      return !this.options.requireOrigin;
+    }
+
+    return this.isOriginValueAllowed(origin);
+  }
+
+  private isOriginValueAllowed(origin: string): boolean {
+    const allowedOrigins = this.options.allowedOrigins ?? [];
+    if (allowedOrigins.length === 0) {
+      return process.env.NODE_ENV !== 'production';
+    }
+
+    return allowedOrigins.includes(origin);
+  }
+
+  private async rejectUnauthenticatedControlPlane(req: Request, res: Response): Promise<boolean> {
+    return (await this.authenticateControlPlane(req, res)) === null;
+  }
+
+  private async authenticateControlPlane(
+    req: Request,
+    res: Response,
+  ): Promise<RequestContext | null> {
+    if (this.authMiddleware) {
+      try {
+        return await this.authMiddleware.authenticateRequestContext(req);
+      } catch (error: unknown) {
+        res.status(401).json({ error: 'Unauthorized', reason: String(error) });
+        return null;
+      }
+    }
+
+    if (this.options.registrationToken) {
+      const authHeader = req.headers.authorization;
+      const expected = `Bearer ${this.options.registrationToken}`;
+      if (!authHeader || !this.safeStringEquals(authHeader, expected)) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return null;
+      }
+
+      const body = req.body as { tenantId?: unknown } | undefined;
+      const tenantId =
+        req.header('x-tenant-id') ??
+        (typeof body?.tenantId === 'string' ? body.tenantId : undefined);
+      const principalId = req.header('x-principal-id') ?? 'registry-token';
+      const context: RequestContext = {
+        requestId: getRequestContext(req).requestId,
+        authMethod: 'bearer',
+        schemeId: 'registry-token',
+        subject: principalId,
+        principalId,
+        ...(tenantId ? { tenantId } : {}),
+        scopes: ['registry:admin'],
+        roles: ['registry-admin'],
+        claims: {},
+      };
+      attachRequestContext(req, context);
+      return context;
+    }
+
+    if (this.options.requireAuth) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return null;
+    }
+
+    return getRequestContext(req);
+  }
+
+  private filterAgentsByContext(
+    agents: RegisteredAgent[],
+    context: RequestContext,
+  ): RegisteredAgent[] {
+    if (!this.shouldEnforceTenantIsolation(context)) {
+      return agents;
+    }
+
+    return agents.filter((agent) => this.canAccessAgent(agent, context));
+  }
+
+  private canAccessAgent(agent: RegisteredAgent, context: RequestContext): boolean {
+    if (agent.isPublic) {
+      return true;
+    }
+    if (!this.shouldEnforceTenantIsolation(context)) {
+      return true;
+    }
+    if (!agent.tenantId) {
+      return true;
+    }
+
+    return agent.tenantId === context.tenantId;
+  }
+
+  private shouldEnforceTenantIsolation(context: RequestContext): boolean {
+    return (
+      Boolean(this.authMiddleware) ||
+      Boolean(this.options.registrationToken) ||
+      this.options.requireAuth === true ||
+      context.authMethod !== 'anonymous'
+    );
+  }
+
+  private safeStringEquals(left: string, right: string): boolean {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    if (leftBuffer.length !== rightBuffer.length) {
+      return false;
+    }
+    return timingSafeEqual(leftBuffer, rightBuffer);
   }
 
   private emitRegistryEvent(payload: unknown): void {
@@ -503,10 +826,14 @@ export class RegistryServer {
   }
 
   private configureSse(res: Response): void {
+    this.sseClients.add(res);
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
+    });
+    res.on('close', () => {
+      this.sseClients.delete(res);
     });
   }
 
@@ -595,6 +922,8 @@ export class RegistryServer {
   }
 
   private purgeAgentTaskState(agentId: string): void {
+    this.nextHealthCheckAt.delete(agentId);
+    this.nextTaskPollAt.delete(agentId);
     for (const key of [...this.recentTasks.keys()]) {
       if (key.startsWith(`${agentId}:`)) {
         this.recentTasks.delete(key);
@@ -604,18 +933,18 @@ export class RegistryServer {
   }
 
   private async getMetricsSummary(): Promise<RegistryMetricsSummary> {
-    const agents = await this.store.getAll();
+    const agents = await this.store.summarize();
 
     return {
       registrations: this.metrics.registrations,
       searches: this.metrics.searches,
       heartbeats: this.metrics.heartbeats,
-      agentCount: agents.length,
-      healthyAgents: agents.filter((agent) => agent.status === 'healthy').length,
-      unhealthyAgents: agents.filter((agent) => agent.status === 'unhealthy').length,
-      unknownAgents: agents.filter((agent) => agent.status === 'unknown').length,
-      activeTenants: new Set(agents.map((agent) => agent.tenantId).filter(Boolean)).size,
-      publicAgents: agents.filter((agent) => agent.isPublic).length,
+      agentCount: agents.agentCount,
+      healthyAgents: agents.healthyAgents,
+      unhealthyAgents: agents.unhealthyAgents,
+      unknownAgents: agents.unknownAgents,
+      activeTenants: agents.activeTenants,
+      publicAgents: agents.publicAgents,
     };
   }
 

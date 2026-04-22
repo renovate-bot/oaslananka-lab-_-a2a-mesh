@@ -3,13 +3,22 @@
  * Authentication middleware backed by OIDC discovery, JWKS and API keys.
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import {
+  attachRequestContext,
+  createAuthenticatedRequestContext,
+  type RequestWithContext,
+} from './requestContext.js';
 import type {
+  ApiKeyCredential,
   ApiKeyCredentialSource,
   AuthScheme,
   AuthValidationResult,
+  HttpAuthScheme,
   OpenIdConnectAuthScheme,
+  RequestContext,
 } from '../types/auth.js';
 
 export interface JwtAuthMiddlewareOptions {
@@ -50,7 +59,7 @@ export class JwtAuthMiddleware {
           }
 
           if (scheme.type === 'http') {
-            return this.validateBearerToken(req);
+            return this.validateBearerToken(req, scheme);
           }
 
           if (scheme.type === 'openIdConnect') {
@@ -65,11 +74,21 @@ export class JwtAuthMiddleware {
     throw lastError ?? new Error('Authentication failed');
   }
 
+  async authenticateRequestContext(req: Request): Promise<RequestContext> {
+    const authResult = await this.authenticateRequest(req);
+    const context = createAuthenticatedRequestContext(req, authResult);
+    attachRequestContext(req, context);
+    Object.assign(req, { auth: authResult });
+    return context;
+  }
+
   middleware() {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const authResult = await this.authenticateRequest(req);
-        Object.assign(req, { auth: authResult });
+        const context = createAuthenticatedRequestContext(req, authResult);
+        attachRequestContext(req, context);
+        Object.assign(req as RequestWithContext, { auth: authResult });
         next();
       } catch (error) {
         res.status(401).json({
@@ -90,8 +109,8 @@ export class JwtAuthMiddleware {
     scheme: Extract<AuthScheme, { type: 'apiKey' }>,
   ): AuthValidationResult {
     const expected = this.options.apiKeys?.[scheme.id];
-    const validValues = Array.isArray(expected) ? expected : expected ? [expected] : [];
-    if (validValues.length === 0) {
+    const credentials = this.normalizeApiKeyCredentials(expected);
+    if (credentials.length === 0) {
       throw new Error(`No API key configured for scheme ${scheme.id}`);
     }
 
@@ -102,11 +121,27 @@ export class JwtAuthMiddleware {
           ? req.query[scheme.name]
           : undefined;
 
-    if (typeof incoming !== 'string' || !validValues.includes(incoming)) {
+    if (typeof incoming !== 'string') {
       throw new Error('Invalid API key');
     }
 
-    return { schemeId: scheme.id };
+    const matched = credentials.find((credential) =>
+      this.safeStringEquals(credential.value, incoming),
+    );
+    if (!matched) {
+      throw new Error('Invalid API key');
+    }
+
+    return {
+      schemeId: scheme.id,
+      authMethod: 'apiKey',
+      subject: matched.principalId ?? `api-key:${scheme.id}`,
+      principalId: matched.principalId ?? `api-key:${scheme.id}`,
+      ...(matched.tenantId ? { tenantId: matched.tenantId } : {}),
+      scopes: matched.scopes ?? [],
+      roles: matched.roles ?? [],
+      claims: matched.claims ?? {},
+    };
   }
 
   private async validateOidcToken(
@@ -128,11 +163,7 @@ export class JwtAuthMiddleware {
       throw new Error('OIDC configuration is missing jwks_uri');
     }
 
-    let remoteSet = this.remoteSets.get(jwksUri);
-    if (!remoteSet) {
-      remoteSet = createRemoteJWKSet(new URL(jwksUri));
-      this.remoteSets.set(jwksUri, remoteSet);
-    }
+    const remoteSet = this.getRemoteSet(jwksUri);
 
     const verifyOptions = {
       ...(scheme.audience ? { audience: scheme.audience } : {}),
@@ -142,20 +173,76 @@ export class JwtAuthMiddleware {
 
     const { payload } = await jwtVerify(token, remoteSet, verifyOptions);
 
-    return {
+    return this.resultFromJwtPayload({
       schemeId: scheme.id,
-      ...(payload.sub ? { subject: payload.sub } : {}),
-      claims: payload as unknown as Record<string, unknown>,
-    };
+      authMethod: 'oidc',
+      payload,
+      ...((scheme.issuer ?? discovery.issuer) ? { issuer: scheme.issuer ?? discovery.issuer } : {}),
+      ...(scheme.audience ? { audience: scheme.audience } : {}),
+    });
   }
 
-  private async validateBearerToken(req: Request): Promise<AuthValidationResult> {
+  private async validateBearerToken(
+    req: Request,
+    scheme: HttpAuthScheme,
+  ): Promise<AuthValidationResult> {
+    if (!scheme.jwksUri) {
+      throw new Error('Bearer JWT verification is not configured');
+    }
+
     const token = this.readBearerToken(req);
-    const payload = this.decodeJwtWithoutValidation(token);
+    const { payload } = await jwtVerify(token, this.getRemoteSet(scheme.jwksUri), {
+      ...(scheme.audience ? { audience: scheme.audience } : {}),
+      ...(scheme.issuer ? { issuer: scheme.issuer } : {}),
+      algorithms: scheme.algorithms ?? ['RS256', 'ES256'],
+    });
+
+    return this.resultFromJwtPayload({
+      schemeId: scheme.id,
+      authMethod: 'bearer',
+      payload,
+      ...(scheme.issuer ? { issuer: scheme.issuer } : {}),
+      ...(scheme.audience ? { audience: scheme.audience } : {}),
+    });
+  }
+
+  private getRemoteSet(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
+    let remoteSet = this.remoteSets.get(jwksUri);
+    if (!remoteSet) {
+      remoteSet = createRemoteJWKSet(new URL(jwksUri));
+      this.remoteSets.set(jwksUri, remoteSet);
+    }
+
+    return remoteSet;
+  }
+
+  private resultFromJwtPayload(args: {
+    schemeId: string;
+    authMethod: 'bearer' | 'oidc';
+    payload: JWTPayload;
+    issuer?: string;
+    audience?: string | string[];
+  }): AuthValidationResult {
+    const claims = args.payload as unknown as Record<string, unknown>;
+    const principalId = this.readStringClaim(claims, ['principalId', 'sub', 'client_id', 'azp']);
+    if (!principalId) {
+      throw new Error('JWT missing principal claim');
+    }
+    const tenantId = this.readStringClaim(claims, ['tenantId', 'tenant_id', 'org_id']);
+    const scopes = this.readStringListClaim(claims, ['scope', 'scp', 'scopes']);
+    const roles = this.readStringListClaim(claims, ['roles', 'role']);
+
     return {
-      schemeId: 'bearer',
-      ...(payload.sub ? { subject: payload.sub } : {}),
-      claims: payload as unknown as Record<string, unknown>,
+      schemeId: args.schemeId,
+      authMethod: args.authMethod,
+      subject: args.payload.sub ?? principalId,
+      principalId,
+      ...(tenantId ? { tenantId } : {}),
+      scopes,
+      roles,
+      ...(args.issuer ? { issuer: args.issuer } : {}),
+      ...(args.audience ? { audience: args.audience } : {}),
+      claims,
     };
   }
 
@@ -168,13 +255,55 @@ export class JwtAuthMiddleware {
     return header.slice('bearer '.length).trim();
   }
 
-  private decodeJwtWithoutValidation(token: string): JWTPayload {
-    const parts = token.split('.');
-    if (parts.length < 2) {
-      throw new Error('Invalid JWT');
+  private normalizeApiKeyCredentials(
+    expected: ApiKeyCredentialSource[string] | undefined,
+  ): ApiKeyCredential[] {
+    const values = Array.isArray(expected) ? expected : expected ? [expected] : [];
+    return values.map((value) =>
+      typeof value === 'string'
+        ? { value }
+        : {
+            value: value.value,
+            ...(value.principalId ? { principalId: value.principalId } : {}),
+            ...(value.tenantId ? { tenantId: value.tenantId } : {}),
+            ...(value.scopes ? { scopes: value.scopes } : {}),
+            ...(value.roles ? { roles: value.roles } : {}),
+            ...(value.claims ? { claims: value.claims } : {}),
+          },
+    );
+  }
+
+  private safeStringEquals(left: string, right: string): boolean {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    if (leftBuffer.length !== rightBuffer.length) {
+      return false;
+    }
+    return timingSafeEqual(leftBuffer, rightBuffer);
+  }
+
+  private readStringClaim(claims: Record<string, unknown>, names: string[]): string | undefined {
+    for (const name of names) {
+      const value = claims[name];
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
     }
 
-    const payloadJson = Buffer.from(parts[1] ?? '', 'base64url').toString('utf8');
-    return JSON.parse(payloadJson) as JWTPayload;
+    return undefined;
+  }
+
+  private readStringListClaim(claims: Record<string, unknown>, names: string[]): string[] {
+    for (const name of names) {
+      const value = claims[name];
+      if (typeof value === 'string' && value.length > 0) {
+        return value.split(' ').filter(Boolean);
+      }
+      if (Array.isArray(value)) {
+        return value.filter((item): item is string => typeof item === 'string');
+      }
+    }
+
+    return [];
   }
 }

@@ -1,4 +1,5 @@
 import type { AgentCard } from 'a2a-mesh';
+import type { AgentListQuery, AgentListResult, AgentStorageSummary } from './indexing.js';
 
 export type AgentStatus = 'healthy' | 'unhealthy' | 'unknown';
 
@@ -25,6 +26,10 @@ export interface IAgentStorage {
   upsert(agent: RegisteredAgent): Promise<RegisteredAgent>;
   get(id: string): Promise<RegisteredAgent | null>;
   getAll(): Promise<RegisteredAgent[]>;
+  list(query?: AgentListQuery): Promise<AgentListResult>;
+  summarize(
+    query?: Pick<AgentListQuery, 'tenantId' | 'includePublic' | 'isPublic'>,
+  ): Promise<AgentStorageSummary>;
   delete(id: string): Promise<boolean>;
   updateStatus(
     id: string,

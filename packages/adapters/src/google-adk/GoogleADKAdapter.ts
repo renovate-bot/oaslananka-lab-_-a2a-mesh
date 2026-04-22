@@ -6,22 +6,8 @@
 import { BaseAdapter } from '../custom/BaseAdapter.js';
 import { fetchWithPolicy } from 'a2a-mesh';
 import { logger, normalizeAgentCard } from 'a2a-mesh';
-import type {
-  AnyAgentCard,
-  Artifact,
-  ExtensibleArtifact,
-  Message,
-  Part,
-  Task,
-  TextPart,
-} from 'a2a-mesh';
-
-function extractText(parts: Part[]): string {
-  return parts
-    .filter((part): part is TextPart => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n');
-}
+import type { AnyAgentCard, Artifact, Message, Task } from 'a2a-mesh';
+import { createTextArtifact, extractRequiredText, extractText } from '../custom/contract.js';
 
 /**
  * Remote HTTP adapter for Google Agent Development Kit deployments.
@@ -48,6 +34,7 @@ export class GoogleADKAdapter extends BaseAdapter {
       role: entry.role === 'agent' ? 'model' : 'user',
       content: extractText(entry.parts),
     }));
+    const inputText = extractRequiredText(message.parts, 'Google ADK');
 
     const response = await fetchWithPolicy(
       this.adkEndpoint,
@@ -60,7 +47,7 @@ export class GoogleADKAdapter extends BaseAdapter {
         body: JSON.stringify({
           taskId: task.id,
           contextId: task.contextId,
-          message: extractText(message.parts),
+          message: inputText,
           history,
         }),
       },
@@ -111,17 +98,18 @@ export class GoogleADKAdapter extends BaseAdapter {
         chunks += buffer.slice('data: '.length) + '\n';
       }
 
-      const artifact: ExtensibleArtifact = {
+      const artifact = createTextArtifact(task, {
         artifactId: `google-adk-${Date.now()}`,
         name: 'Google ADK Stream Response',
-        parts: [{ type: 'text', text: chunks.trim() }],
-        index: 0,
-        lastChunk: true,
+        text: chunks.trim(),
+        provider: 'google-adk',
+        compatibility: 'beta',
+        streamed: true,
+        supportsStreaming: true,
         metadata: {
-          provider: 'google-adk',
           streamed: true,
         },
-      };
+      }) as Artifact;
       return [artifact];
     }
 
@@ -130,17 +118,17 @@ export class GoogleADKAdapter extends BaseAdapter {
       result?: string;
       metadata?: Record<string, unknown>;
     };
-    const artifact: ExtensibleArtifact = {
+    const artifact = createTextArtifact(task, {
       artifactId: `google-adk-${Date.now()}`,
       name: 'Google ADK Response',
-      parts: [{ type: 'text', text: json.output ?? json.result ?? '' }],
-      index: 0,
-      lastChunk: true,
+      text: json.output ?? json.result ?? '',
+      provider: 'google-adk',
+      compatibility: 'beta',
+      supportsStreaming: true,
       metadata: {
-        provider: 'google-adk',
         ...(json.metadata ?? {}),
       },
-    };
+    }) as Artifact;
     return [artifact];
   }
 }

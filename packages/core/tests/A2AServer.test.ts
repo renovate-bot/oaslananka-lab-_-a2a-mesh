@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { A2AServer } from '../src/server/A2AServer.js';
-import { ErrorCodes, type JsonRpcRequest } from '../src/types/jsonrpc.js';
+import { getRequestContext } from '../src/auth/requestContext.js';
+import { ErrorCodes, JsonRpcError, type JsonRpcRequest } from '../src/types/jsonrpc.js';
 import type { AgentCard } from '../src/types/agent-card.js';
 import type { Artifact, Message, Task } from '../src/types/task.js';
 
@@ -32,12 +33,13 @@ class HarnessServer extends A2AServer {
       createAgentCard(cardOverrides),
       withAuth
         ? {
+            allowUnresolvedHostnames: true,
             auth: {
               securitySchemes: [{ type: 'apiKey', id: 'api-key', in: 'header', name: 'x-api-key' }],
               apiKeys: { 'api-key': 'secret' },
             },
           }
-        : {},
+        : { allowUnresolvedHostnames: true },
     );
   }
 
@@ -58,16 +60,21 @@ class HarnessServer extends A2AServer {
   }
 
   async callRpc(request: JsonRpcRequest, headers: Record<string, string> = {}): Promise<unknown> {
-    return this.handleRpc(request, {
-      req: {
-        header(name: string) {
-          return headers[name] ?? headers[name.toLowerCase()];
-        },
-        query: {},
-        body: request,
-        requestId: 'request-1',
-      } as never,
-    });
+    const req = {
+      header(name: string) {
+        return headers[name] ?? headers[name.toLowerCase()];
+      },
+      query: {},
+      body: request,
+      requestId: 'request-1',
+    } as never;
+    const requestContext = this.authMiddleware
+      ? await this.authMiddleware.authenticateRequestContext(req).catch(() => {
+          throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized');
+        })
+      : getRequestContext(req);
+
+    return this.handleRpc(request, { req, requestContext });
   }
 
   normalize(task: Task, artifacts: Artifact[]) {
@@ -156,53 +163,65 @@ describe('A2AServer', () => {
       timestamp: new Date().toISOString(),
     };
 
-    const task = (await server.callRpc({
-      jsonrpc: '2.0',
-      id: 'send-1',
-      method: 'message/send',
-      params: {
-        message,
-        contextId: 'ctx-1',
-        configuration: {
-          extensions: [{ uri: 'https://example.com/extensions/citations/v1', required: true }],
+    const task = (await server.callRpc(
+      {
+        jsonrpc: '2.0',
+        id: 'send-1',
+        method: 'message/send',
+        params: {
+          message,
+          contextId: 'ctx-1',
+          configuration: {
+            extensions: [{ uri: 'https://example.com/extensions/citations/v1', required: true }],
+          },
         },
       },
-    })) as Task;
+      { 'x-api-key': 'secret' },
+    )) as Task;
 
     expect(task.contextId).toBe('ctx-1');
     expect(
       (
-        (await server.callRpc({
-          jsonrpc: '2.0',
-          id: 'get-1',
-          method: 'tasks/get',
-          params: { taskId: task.id },
-        })) as Task
+        (await server.callRpc(
+          {
+            jsonrpc: '2.0',
+            id: 'get-1',
+            method: 'tasks/get',
+            params: { taskId: task.id },
+          },
+          { 'x-api-key': 'secret' },
+        )) as Task
       ).id,
     ).toBe(task.id);
     expect(
       (
-        (await server.callRpc({
-          jsonrpc: '2.0',
-          id: 'cancel-1',
-          method: 'tasks/cancel',
-          params: { taskId: task.id },
-        })) as Task
+        (await server.callRpc(
+          {
+            jsonrpc: '2.0',
+            id: 'cancel-1',
+            method: 'tasks/cancel',
+            params: { taskId: task.id },
+          },
+          { 'x-api-key': 'secret' },
+        )) as Task
       ).status.state,
     ).toBe('canceled');
 
     await expect(
-      server.callRpc({
-        jsonrpc: '2.0',
-        id: 'ext-1',
-        method: 'message/send',
-        params: {
-          message,
-          configuration: {
-            extensions: [{ uri: 'https://unsupported.example/extensions/a', required: true }],
+      server.callRpc(
+        {
+          jsonrpc: '2.0',
+          id: 'ext-1',
+          method: 'message/send',
+          params: {
+            message,
+            configuration: {
+              extensions: [{ uri: 'https://unsupported.example/extensions/a', required: true }],
+            },
           },
         },
-      }),
+        { 'x-api-key': 'secret' },
+      ),
     ).rejects.toMatchObject({
       code: ErrorCodes.ExtensionRequired,
     });

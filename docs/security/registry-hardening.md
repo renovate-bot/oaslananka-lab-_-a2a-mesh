@@ -13,8 +13,14 @@ We use a specialized `validateSafeUrl` utility to parse incoming agent URLs duri
 2. Parses the hostname.
 3. If the hostname is an IP, checks against private/loopback/link-local ranges.
 4. If it's a domain name, resolves it via DNS and verifies that none of the returned addresses are in a private range.
+5. Fails closed when DNS resolution fails unless `allowUnresolvedHostnames` is explicitly enabled for development or an isolated private mesh.
+6. Revalidates URLs before health checks so a stored registration cannot bypass the outbound-call policy.
 
-_Note: For local development, SSRF protection can be bypassed by setting `allowLocalhost: true` in the `RegistryServerOptions`._
+_Note: For local development, loopback URLs can be enabled with `allowLocalhost: true`. Production deployments should keep `allowUnresolvedHostnames` disabled and use explicit network allowlists or private DNS controls for internal meshes._
+
+## Origin and CORS
+
+Production registry servers reject browser requests with unapproved `Origin` headers by default. Configure `allowedOrigins` for the operator UI or run the UI same-origin behind a reverse proxy. SSE endpoints use the same origin and authentication checks as the REST control-plane routes.
 
 ## Health Check Timeouts
 
@@ -22,4 +28,9 @@ Health check requests (`fetch`) are now wrapped with an `AbortController`. This 
 
 ## Authentication
 
-The `/agents/register` and `DELETE /agents/:id` endpoints now support optional Bearer Token authentication. This is configured via `requireAuth: true` and `registrationToken: "..."` in the `RegistryServerOptions`.
+The registry supports two authentication modes:
+
+- `registrationToken` for simple service-token deployments.
+- `auth` with `JwtAuthMiddleware` schemes for API-key, verified bearer JWT, or OIDC/JWKS deployments.
+
+Public discovery can be exposed with `GET /agents?public=true`. Private catalog reads, registration, heartbeat, delete, SSE event streams, and task streams should require authenticated control-plane credentials.

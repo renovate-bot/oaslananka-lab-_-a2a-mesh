@@ -153,7 +153,7 @@ describe('Concurrency safety', () => {
       expect(getResult.id).toBe(createdTask.id);
 
       const finalTask = await waitForTerminalTask(client, createdTask.id, 10000);
-      expect(['canceled', 'completed', 'failed']).toContain(finalTask.status.state);
+      expect(finalTask.status.state).toBe('canceled');
     } finally {
       await close();
     }

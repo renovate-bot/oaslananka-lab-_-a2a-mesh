@@ -94,12 +94,12 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 
 ---
 
-## 🎬 Act 4: Production Readiness
+## Act 4: Production Readiness
 
 **Speaker Notes:** "The demo surface is intentionally simple, but the runtime behavior is designed for production use. While that flow ran, `a2a-mesh` was automatically:"
 
 1. **Protecting against SSRF:** Validating every health check to ensure it doesn't hit private AWS metadata endpoints.
-2. **Tracing everything:** Using OpenTelemetry to propagate spans across the Researcher, Analyst, and Writer HTTP calls.
+2. **Emitting trace hooks:** Creating OpenTelemetry spans for RPC handling, task work, outbound HTTP, and SSE delivery when an exporter is configured.
 3. **Throttling gracefully:** The Registry used chunked Redis \`SCAN\` calls and Jitter to prevent thundering herds on health checks.
 
 **Closing:** "This is `a2a-mesh`: a TypeScript runtime and control plane for interoperable A2A systems."
@@ -108,5 +108,5 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 
 Before the public demo or launch, update the GitHub repository metadata manually:
 
-- Description: `Production-ready TypeScript runtime for Google's Agent2Agent (A2A) Protocol — server runtime, adapters for 6 frameworks, registry, MCP bridge & CLI.`
+- Description: `Security-hardened TypeScript runtime for Google's Agent2Agent (A2A) Protocol: server runtime, adapters, registry, MCP bridge, and CLI.`
 - Topics: `a2a agent2agent ai-agents multi-agent typescript mcp langchain openai anthropic google-adk llamaindex crewai protocol nodejs monorepo llm orchestration`

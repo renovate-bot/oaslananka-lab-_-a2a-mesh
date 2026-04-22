@@ -1,4 +1,3 @@
-import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { A2AServer, type A2AServerOptions } from '../src/server/A2AServer.js';
@@ -100,31 +99,25 @@ describe('A2AServer edge cases', () => {
   });
 
   it('returns 403 when a task stream is accessed from a different tenant', async () => {
-    const server = new EdgeHarnessServer();
+    const server = new EdgeHarnessServer({
+      auth: {
+        securitySchemes: [{ type: 'apiKey', id: 'api-key', in: 'header', name: 'x-api-key' }],
+        apiKeys: {
+          'api-key': [
+            { value: 'key-a', principalId: 'user-a', tenantId: 'tenant-1' },
+            { value: 'key-a-tenant-2', principalId: 'user-a', tenantId: 'tenant-2' },
+          ],
+        },
+      },
+    });
     const task = server
       .getTaskManager()
       .createTask('session-edge', 'context-edge', 'user-a', 'tenant-1');
 
-    const app = express();
-    app.use(express.json());
-    app.use((req, _res, next) => {
-      const principalId = req.header('x-principal');
-      const tenantId = req.header('x-tenant');
-      if (principalId) {
-        (req as { principalId?: string }).principalId = principalId;
-      }
-      if (tenantId) {
-        (req as { tenantId?: string }).tenantId = tenantId;
-      }
-      next();
-    });
-    app.use(server.getExpressApp());
-
-    const response = await request(app)
+    const response = await request(server.getExpressApp())
       .get('/stream')
       .query({ taskId: task.id })
-      .set('x-principal', 'user-a')
-      .set('x-tenant', 'tenant-2');
+      .set('x-api-key', 'key-a-tenant-2');
 
     expect(response.status).toBe(403);
     expect(response.text).toBe('Forbidden');
@@ -162,7 +155,7 @@ describe('A2AServer edge cases', () => {
         params: {
           taskId: task.id,
           pushNotificationConfig: {
-            url: 'http://127.0.0.1:8787/hook',
+            url: 'http://169.254.169.254/hook',
           },
         },
       });
@@ -171,5 +164,86 @@ describe('A2AServer edge cases', () => {
     expect(response.body.error.code).toBe(ErrorCodes.InvalidParams);
     expect(response.body.error.message).toContain('Invalid push notification URL');
     expect(response.body.error.message).toContain('Private IP addresses are not allowed');
+  });
+
+  it('replays idempotent task creation requests and rejects conflicting payloads', async () => {
+    const server = new EdgeHarnessServer();
+    const payload = {
+      jsonrpc: '2.0',
+      id: 'idempotency-1',
+      method: 'message/send',
+      params: {
+        message: createMessage('idempotent request'),
+      },
+    };
+
+    const first = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Idempotency-Key', 'create-task-1')
+      .send(payload);
+    const second = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Idempotency-Key', 'create-task-1')
+      .send({ ...payload, id: 'idempotency-2' });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.result.id).toBe(first.body.result.id);
+    expect(second.body.result.metadata.idempotency).toMatchObject({
+      key: 'create-task-1',
+      replayed: true,
+    });
+
+    const conflict = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Idempotency-Key', 'create-task-1')
+      .send({
+        ...payload,
+        id: 'idempotency-3',
+        params: {
+          message: createMessage('different body'),
+        },
+      });
+
+    expect(conflict.status).toBe(200);
+    expect(conflict.body.error.code).toBe(ErrorCodes.IdempotencyConflict);
+  });
+
+  it('exposes runtime metrics and rejects invalid terminal transitions', async () => {
+    const server = new EdgeHarnessServer();
+
+    const created = await request(server.getExpressApp())
+      .post('/rpc')
+      .send({
+        jsonrpc: '2.0',
+        id: 'task-for-metrics',
+        method: 'message/send',
+        params: {
+          message: createMessage('metrics please'),
+        },
+      });
+    expect(created.status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const cancelResponse = await request(server.getExpressApp())
+      .post('/rpc')
+      .send({
+        jsonrpc: '2.0',
+        id: 'cancel-terminal',
+        method: 'tasks/cancel',
+        params: {
+          taskId: created.body.result.id,
+        },
+      });
+
+    expect(cancelResponse.status).toBe(200);
+    expect(cancelResponse.body.error.code).toBe(ErrorCodes.InvalidTaskTransition);
+
+    const metricsResponse = await request(server.getExpressApp()).get('/metrics');
+    expect(metricsResponse.status).toBe(200);
+    expect(metricsResponse.text).toContain('a2a_runtime_task_created_total');
+    expect(metricsResponse.text).toContain('a2a_runtime_task_completed_total');
+    expect(metricsResponse.text).toContain('a2a_runtime_tasks_active');
   });
 });

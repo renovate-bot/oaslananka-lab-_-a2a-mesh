@@ -8,7 +8,7 @@ Developers are stuck writing custom glue code just to get a LangChain agent to t
 
 ## The Solution: a2a-mesh
 
-\`a2a-mesh\` is the production-grade implementation of the Google A2A (Agent-to-Agent) Protocol. It provides the **runtime, network reliability, and control plane** necessary to orchestrate heterogeneous agent networks.
+\`a2a-mesh\` is a security-hardened implementation of the Google A2A (Agent-to-Agent) Protocol. It provides the **runtime, network reliability, and control plane** necessary to orchestrate heterogeneous agent networks.
 
 ### Core Value Pillars
 
@@ -20,11 +20,11 @@ Developers are stuck writing custom glue code just to get a LangChain agent to t
    - Distributed systems are impossible to debug via terminal logs.
    - The built-in Registry UI provides a Live Topology map, real-time SSE task streaming, and agent capability discovery.
 
-3. **Enterprise-Grade Security & Scale**
-   - **SSRF Prevention:** Strict validation of all webhook and discovery URLs against private/loopback IP ranges.
-   - **Tenant Isolation:** Native support for \`principalId\` and \`tenantId\` boundaries.
+3. **Security & Scale**
+   - **SSRF Prevention:** Strict validation of webhook and discovery URLs against private, loopback, link-local, metadata, and unresolved-hostname risks.
+   - **Tenant Isolation:** Native support for \`principalId\` and \`tenantId\` boundaries when authentication is configured.
    - **Network Reliability:** Idempotent retries, exponential backoff, and chunked Redis polling to prevent thundering herds.
-   - **Observability:** Built-in OpenTelemetry span propagation across multi-agent HTTP hops.
+   - **Observability:** Built-in OpenTelemetry span hooks and registry metrics, with application-owned exporter bootstrap.
 
 4. **5 Minutes to Value**
    - The \`npx create-a2a-mesh\` CLI provides ready-to-run multi-agent templates (e.g., Researcher + Writer), bypassing the steep learning curve of agent orchestration.

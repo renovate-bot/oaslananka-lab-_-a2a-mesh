@@ -17,7 +17,7 @@ The `a2a-mesh` platform relies on a layered testing matrix to ensure extreme rel
 
 3. **Contract / CLI Smoke Tests**
    - Located in `cli/tests/`.
-   - Goal: Generate projects using the CLI scaffold (`create-a2a-mesh` / `a2a scaffold`), build the output, and assert the artifacts are production-ready.
+   - Goal: Generate projects using the CLI scaffold (`create-a2a-mesh` / `a2a scaffold`), build the output, and assert the artifacts are production-oriented and secure by default.
 4. **UI Smoke / E2E Tests (Playwright)**
    - Located in `apps/registry-ui/tests/`.
    - Goal: Boot the visual Control Plane, connect it to a mocked or local Registry, and visually assert that elements like Agent Cards, Status Badges, and Live Stream inputs render correctly without throwing JS errors.

@@ -35,7 +35,7 @@ export class SSEStreamer {
    * @param taskId The task ID associated with the stream.
    * @param res The Express Response object.
    */
-  addClient(taskId: string, res: Response) {
+  addClient(taskId: string, res: Response, onClose?: () => void) {
     if (!this.clients.has(taskId)) {
       this.clients.set(taskId, new Set());
     }
@@ -49,11 +49,11 @@ export class SSEStreamer {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     });
 
     res.on('close', () => {
       this.removeClient(taskId, res);
+      onClose?.();
     });
   }
 

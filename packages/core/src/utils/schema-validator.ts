@@ -20,6 +20,10 @@ const AuthSchemeSchema = z.union([
     id: z.string(),
     scheme: z.literal('bearer'),
     bearerFormat: z.string().optional(),
+    jwksUri: z.string().url().optional(),
+    audience: z.union([z.string(), z.array(z.string())]).optional(),
+    issuer: z.string().optional(),
+    algorithms: z.array(z.string()).optional(),
     description: z.string().optional(),
   }),
   z.object({
@@ -43,7 +47,7 @@ const A2AExtensionSchema = z.object({
 export const JsonRpcRequestSchema = z.object({
   jsonrpc: z.literal('2.0'),
   method: z.string(),
-  params: z.union([z.record(z.unknown()), z.array(z.unknown())]).optional(),
+  params: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown())]).optional(),
   id: z.union([z.string(), z.number(), z.null()]).optional(),
 });
 
@@ -58,7 +62,7 @@ export const PartSchema = z.union([
       uri: z.string().optional(),
     }),
   }),
-  z.object({ type: z.literal('data'), data: z.record(z.unknown()) }),
+  z.object({ type: z.literal('data'), data: z.record(z.string(), z.unknown()) }),
 ]);
 
 export const MessageSchema = z.object({
@@ -108,7 +112,7 @@ export const TaskListParamsSchema = z.object({
 export function validateRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    throw new JsonRpcError(ErrorCodes.InvalidParams, 'Invalid parameters', result.error.errors);
+    throw new JsonRpcError(ErrorCodes.InvalidParams, 'Invalid parameters', result.error.issues);
   }
   return result.data;
 }

@@ -5,7 +5,8 @@
 
 import { BaseAdapter } from '../custom/BaseAdapter.js';
 import { logger, normalizeAgentCard } from 'a2a-mesh';
-import type { AnyAgentCard, ExtensibleArtifact, Message, Part, Task, TextPart } from 'a2a-mesh';
+import type { AnyAgentCard, ExtensibleArtifact, Message, Task } from 'a2a-mesh';
+import { createTextArtifact, extractRequiredText, extractText } from '../custom/contract.js';
 
 export interface LlamaIndexNodeWithScore {
   score?: number;
@@ -36,13 +37,6 @@ export interface ChatEngineLike {
   >;
 }
 
-function extractText(parts: Part[]): string {
-  return parts
-    .filter((part): part is TextPart => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n');
-}
-
 /**
  * Adapter for LlamaIndex query and chat engines.
  *
@@ -61,10 +55,7 @@ export class LlamaIndexAdapter extends BaseAdapter {
       taskId: task.id,
       ...(task.contextId ? { contextId: task.contextId } : {}),
     });
-    const input = extractText(message.parts);
-    if (!input) {
-      throw new Error('LlamaIndex Adapter requires text input');
-    }
+    const input = extractRequiredText(message.parts, 'LlamaIndex');
 
     if (this.isChatEngine(this.engine)) {
       const chatHistory = task.history
@@ -78,11 +69,11 @@ export class LlamaIndexAdapter extends BaseAdapter {
         chatHistory,
         stream: task.metadata?.stream === true,
       });
-      return [this.toArtifact(response, 'LlamaIndex Chat Response')];
+      return [this.toArtifact(task, response, 'LlamaIndex Chat Response')];
     }
 
     const response = await this.engine.query({ query: input });
-    return [this.toArtifact(response, 'LlamaIndex Query Response')];
+    return [this.toArtifact(task, response, 'LlamaIndex Query Response')];
   }
 
   private isChatEngine(engine: QueryEngineLike | ChatEngineLike): engine is ChatEngineLike {
@@ -90,6 +81,7 @@ export class LlamaIndexAdapter extends BaseAdapter {
   }
 
   private toArtifact(
+    task: Task,
     response:
       | string
       | { response?: string; message?: string; sourceNodes?: LlamaIndexNodeWithScore[] }
@@ -106,21 +98,21 @@ export class LlamaIndexAdapter extends BaseAdapter {
         ? response
         : (response.response ?? response.message ?? JSON.stringify(response, null, 2));
 
-    return {
+    return createTextArtifact(task, {
       artifactId: `llamaindex-${Date.now()}`,
       name,
-      parts: [{ type: 'text', text }],
-      index: 0,
-      lastChunk: true,
+      text,
+      provider: 'llamaindex',
+      compatibility: 'beta',
+      supportsStreaming: false,
       metadata: {
-        provider: 'llamaindex',
         sourceNodes: sourceNodes.map((node) => ({
           score: node.score,
           metadata: node.node?.metadata ?? {},
         })),
       },
       extensions: sourceNodes.length > 0 ? ['urn:a2a:extensions:llamaindex/source-nodes'] : [],
-    };
+    }) as ExtensibleArtifact;
   }
 
   private isAsyncIterable(

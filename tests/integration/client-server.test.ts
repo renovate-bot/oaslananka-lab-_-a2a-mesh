@@ -23,6 +23,7 @@ class IntegrationServer extends A2AServer {
         securitySchemes: [{ type: 'apiKey', id: 'api-key', in: 'header', name: 'x-api-key' }],
       },
       {
+        allowUnresolvedHostnames: true,
         auth: {
           securitySchemes: [{ type: 'apiKey', id: 'api-key', in: 'header', name: 'x-api-key' }],
           apiKeys: { 'api-key': 'secret' },

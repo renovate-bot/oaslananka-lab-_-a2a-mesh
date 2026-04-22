@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { Server as HttpServer } from 'node:http';
 import express, { type Express, type Request, type Response } from 'express';
 import { InMemoryTaskStorage } from '../storage/InMemoryTaskStorage.js';
 import type { ITaskStorage } from '../storage/ITaskStorage.js';
@@ -36,8 +37,21 @@ import {
   type RateLimitStore,
 } from '../middleware/rateLimiter.js';
 import { JwtAuthMiddleware, type JwtAuthMiddlewareOptions } from '../auth/JwtAuthMiddleware.js';
+import {
+  attachRequestContext,
+  createAnonymousRequestContext,
+  getRequestContext,
+} from '../auth/requestContext.js';
 import { a2aMeshTracer, SpanStatusCode } from '../telemetry/tracer.js';
+import { RuntimeMetrics } from '../telemetry/RuntimeMetrics.js';
 import { validateSafeUrl } from '../security/url.js';
+import type { RequestContext } from '../types/auth.js';
+import {
+  buildIdempotencyFingerprint,
+  InMemoryIdempotencyStore,
+  type IdempotencyStore,
+} from './IdempotencyStore.js';
+import { TaskLifecycleError } from './TaskManager.js';
 
 export interface A2AServerOptions {
   rateLimit?: Partial<RateLimitConfig>;
@@ -46,19 +60,27 @@ export interface A2AServerOptions {
   taskStorage?: ITaskStorage;
   allowLocalhost?: boolean;
   allowPrivateNetworks?: boolean;
+  allowUnresolvedHostnames?: boolean;
+  allowedOrigins?: string[];
+  requireOrigin?: boolean;
+  bodyLimit?: string;
+  idempotencyStore?: IdempotencyStore;
+  idempotencyTtlMs?: number;
 }
 
-interface RequestContext {
+interface RpcContext {
   req: Request;
+  requestContext: RequestContext;
 }
 
 interface RequestWithRequestId extends Request {
   requestId?: string;
 }
 
-interface RequestWithAuth extends Request {
-  principalId?: string;
-  tenantId?: string;
+interface IdempotencyResolution {
+  scope: string;
+  key: string;
+  fingerprint: string;
 }
 
 export abstract class A2AServer {
@@ -68,19 +90,27 @@ export abstract class A2AServer {
   protected streamer: SSEStreamer;
   protected pushNotificationService: PushNotificationService;
   protected authMiddleware: JwtAuthMiddleware | undefined;
+  private httpServer: HttpServer | undefined;
   private readonly startedAt = Date.now();
+  private readonly runtimeMetrics: RuntimeMetrics;
+  private readonly idempotencyStore: IdempotencyStore;
 
   constructor(
     agentCard: AgentCard,
     private readonly options: A2AServerOptions = {},
   ) {
     this.app = express();
-    this.app.use(express.json());
+    this.app.use(express.json({ limit: options.bodyLimit ?? '1mb' }));
     this.agentCard = agentCard;
     this.taskManager = new TaskManager(options.taskStorage ?? new InMemoryTaskStorage());
     this.streamer = new SSEStreamer();
     this.pushNotificationService = new PushNotificationService();
     this.authMiddleware = options.auth ? new JwtAuthMiddleware(options.auth) : undefined;
+    this.runtimeMetrics = new RuntimeMetrics({
+      serviceName: agentCard.name,
+      serviceVersion: agentCard.version,
+    });
+    this.idempotencyStore = options.idempotencyStore ?? new InMemoryIdempotencyStore();
 
     this.setupMiddleware();
     this.setupRoutes();
@@ -90,6 +120,15 @@ export abstract class A2AServer {
   private setupMiddleware() {
     this.app.use((req: RequestWithRequestId, _res, next) => {
       req.requestId = req.header('x-request-id') ?? randomUUID();
+      attachRequestContext(req, createAnonymousRequestContext(req));
+      next();
+    });
+
+    this.app.use((req, res, next) => {
+      if (!this.isOriginAllowed(req)) {
+        res.status(403).send('Forbidden origin');
+        return;
+      }
       next();
     });
 
@@ -127,26 +166,25 @@ export abstract class A2AServer {
       res.json(payload);
     });
 
+    this.app.get('/metrics', (_req, res) => {
+      res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+      res.send(this.runtimeMetrics.renderPrometheus(this.taskManager.getTaskCounts()));
+    });
+
     this.app.get('/tasks', async (req: Request, res: Response) => {
+      let requestContext = getRequestContext(req);
       if (this.authMiddleware) {
         try {
-          await this.authMiddleware.authenticateRequest(req);
+          requestContext = await this.authMiddleware.authenticateRequestContext(req);
         } catch {
+          this.runtimeMetrics.recordAuthReject();
           res.status(401).send('Unauthorized');
           return;
         }
       }
 
-      const principalId = (req as RequestWithAuth).principalId as string | undefined;
-      const tenantId = (req as RequestWithAuth).tenantId as string | undefined;
-
       let tasks = this.taskManager.getAllTasks();
-      if (principalId) {
-        tasks = tasks.filter((t) => !t.principalId || t.principalId === principalId);
-      }
-      if (tenantId) {
-        tasks = tasks.filter((t) => !t.tenantId || t.tenantId === tenantId);
-      }
+      tasks = this.filterTasksByContext(tasks, requestContext);
 
       // Sort newest first
       tasks.sort(
@@ -158,17 +196,60 @@ export abstract class A2AServer {
     });
 
     const handleJsonRpc = async (req: Request, res: Response) => {
+      let idempotency: IdempotencyResolution | null | undefined;
       try {
         const rpcReq = validateRequest(JsonRpcRequestSchema, req.body) as JsonRpcRequest;
-        const result = await this.handleRpc(rpcReq, { req });
+        let requestContext = getRequestContext(req);
+        if (this.authMiddleware) {
+          try {
+            requestContext = await this.authMiddleware.authenticateRequestContext(req);
+          } catch (error: unknown) {
+            this.runtimeMetrics.recordAuthReject();
+            throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized', {
+              reason: String(error),
+            });
+          }
+        }
+        idempotency = await this.resolveIdempotency(req, rpcReq, requestContext, res);
+        if (idempotency === null) {
+          return;
+        }
+        const result = await this.handleRpc(rpcReq, { req, requestContext });
+        const responseResult = idempotency
+          ? this.decorateIdempotentResult(result, idempotency, false)
+          : result;
+        if (idempotency) {
+          await this.idempotencyStore.set(
+            idempotency.scope,
+            idempotency.key,
+            idempotency.fingerprint,
+            {
+              kind: 'success',
+              value: structuredClone(responseResult),
+            },
+            this.options.idempotencyTtlMs ?? 60 * 60 * 1000,
+          );
+        }
         const response: JsonRpcResponse = {
           jsonrpc: '2.0',
-          result,
+          result: responseResult,
           id: rpcReq.id || null,
         };
         res.json(response);
       } catch (err: unknown) {
         if (err instanceof JsonRpcError) {
+          if (idempotency && err.code !== ErrorCodes.IdempotencyConflict) {
+            await this.idempotencyStore.set(
+              idempotency.scope,
+              idempotency.key,
+              idempotency.fingerprint,
+              {
+                kind: 'error',
+                error: { code: err.code, message: err.message, data: err.data },
+              },
+              this.options.idempotencyTtlMs ?? 60 * 60 * 1000,
+            );
+          }
           res.json({
             jsonrpc: '2.0',
             error: { code: err.code, message: err.message, data: err.data },
@@ -189,10 +270,12 @@ export abstract class A2AServer {
     this.app.post('/a2a/jsonrpc', handleJsonRpc);
 
     const handleStreamRequest = async (req: Request, res: Response) => {
+      let requestContext = getRequestContext(req);
       if (this.authMiddleware) {
         try {
-          await this.authMiddleware.authenticateRequest(req);
+          requestContext = await this.authMiddleware.authenticateRequestContext(req);
         } catch {
+          this.runtimeMetrics.recordAuthReject();
           res.status(401).send('Unauthorized');
           return;
         }
@@ -210,19 +293,15 @@ export abstract class A2AServer {
         return;
       }
 
-      const principalId = (req as RequestWithAuth).principalId as string | undefined;
-      const tenantId = (req as RequestWithAuth).tenantId as string | undefined;
-
-      if (task.principalId && principalId && task.principalId !== principalId) {
-        res.status(403).send('Forbidden');
-        return;
-      }
-      if (task.tenantId && tenantId && task.tenantId !== tenantId) {
+      if (!this.canAccessTask(task, requestContext)) {
         res.status(403).send('Forbidden');
         return;
       }
 
-      this.streamer.addClient(taskId, res);
+      this.runtimeMetrics.recordSseConnectionOpened(Boolean(req.header('last-event-id')));
+      this.streamer.addClient(taskId, res, () => {
+        this.runtimeMetrics.recordSseConnectionClosed();
+      });
       this.streamer.sendTaskUpdate(taskId, task);
     };
     this.app.get('/stream', handleStreamRequest);
@@ -230,7 +309,14 @@ export abstract class A2AServer {
   }
 
   private bindTaskObservers(): void {
-    this.taskManager.on('taskUpdated', async ({ task, reason }) => {
+    this.taskManager.on('taskUpdated', async ({ task, reason, previousState }) => {
+      if (reason === 'created') {
+        this.runtimeMetrics.recordTaskCreated();
+      }
+      if (reason === 'state') {
+        this.runtimeMetrics.recordTaskStateChange(task, previousState);
+      }
+
       if (reason !== 'push-config') {
         this.streamer.sendTaskUpdate(task.id, task);
       }
@@ -254,7 +340,7 @@ export abstract class A2AServer {
     });
   }
 
-  protected async handleRpc(req: JsonRpcRequest, context: RequestContext): Promise<unknown> {
+  protected async handleRpc(req: JsonRpcRequest, context: RpcContext): Promise<unknown> {
     const span = a2aMeshTracer.startSpan('a2a.handleRpc', {
       attributes: {
         'rpc.method': req.method,
@@ -285,12 +371,7 @@ export abstract class A2AServer {
             throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
           }
           // Authorization check
-          const principalId = (context.req as RequestWithAuth).principalId as string | undefined;
-          const tenantId = (context.req as RequestWithAuth).tenantId as string | undefined;
-          if (task.principalId && principalId && task.principalId !== principalId) {
-            throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
-          }
-          if (task.tenantId && tenantId && task.tenantId !== tenantId) {
+          if (!this.canAccessTask(task, context.requestContext)) {
             throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
           }
           return task;
@@ -299,6 +380,13 @@ export abstract class A2AServer {
         case 'tasks/cancel': {
           if (typeof params.taskId !== 'string') {
             throw new JsonRpcError(ErrorCodes.InvalidParams, 'Missing taskId');
+          }
+          const existingTask = this.taskManager.getTask(params.taskId);
+          if (!existingTask) {
+            throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
+          }
+          if (!this.canAccessTask(existingTask, context.requestContext)) {
+            throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
           }
           const task = this.taskManager.cancelTask(params.taskId);
           if (!task) {
@@ -317,6 +405,13 @@ export abstract class A2AServer {
               'Missing taskId or pushNotificationConfig',
             );
           }
+          const task = this.taskManager.getTask(params.taskId);
+          if (!task) {
+            throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
+          }
+          if (!this.canAccessTask(task, context.requestContext)) {
+            throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
+          }
           const pushNotificationConfig = await this.normalizePushNotificationConfig(
             params.pushNotificationConfig as NonNullable<
               NonNullable<MessageSendParams['configuration']>['pushNotificationConfig']
@@ -326,15 +421,19 @@ export abstract class A2AServer {
             params.taskId,
             pushNotificationConfig,
           );
-          if (!config) {
-            throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
-          }
           return config;
         }
 
         case 'tasks/pushNotification/get': {
           if (typeof params.taskId !== 'string') {
             throw new JsonRpcError(ErrorCodes.InvalidParams, 'Missing taskId');
+          }
+          const task = this.taskManager.getTask(params.taskId);
+          if (!task) {
+            throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
+          }
+          if (!this.canAccessTask(task, context.requestContext)) {
+            throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
           }
           return this.taskManager.getPushNotification(params.taskId) ?? null;
         }
@@ -345,14 +444,7 @@ export abstract class A2AServer {
             ? this.taskManager.getTasksByContext(contextId)
             : this.taskManager.getAllTasks();
 
-          const principalId = (context.req as RequestWithAuth).principalId as string | undefined;
-          const tenantId = (context.req as RequestWithAuth).tenantId as string | undefined;
-          if (principalId) {
-            tasks = tasks.filter((t) => !t.principalId || t.principalId === principalId);
-          }
-          if (tenantId) {
-            tasks = tasks.filter((t) => !t.tenantId || t.tenantId === tenantId);
-          }
+          tasks = this.filterTasksByContext(tasks, context.requestContext);
 
           return {
             tasks: tasks.slice(offset, offset + limit),
@@ -364,15 +456,6 @@ export abstract class A2AServer {
           if (!this.agentCard.capabilities?.extendedAgentCard) {
             throw new JsonRpcError(ErrorCodes.UnsupportedOperation, 'Extended card not supported');
           }
-          if (this.authMiddleware) {
-            try {
-              await this.authMiddleware.authenticateRequest(context.req);
-            } catch (error: unknown) {
-              throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized', {
-                reason: String(error),
-              });
-            }
-          }
           return this.agentCard;
         }
 
@@ -380,6 +463,9 @@ export abstract class A2AServer {
           throw new JsonRpcError(ErrorCodes.MethodNotFound, `Method ${req.method} not found`);
       }
     } catch (error: unknown) {
+      if (error instanceof TaskLifecycleError) {
+        throw this.toLifecycleJsonRpcError(error);
+      }
       failed = true;
       span.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
       throw error;
@@ -390,6 +476,10 @@ export abstract class A2AServer {
       span.end();
       logger.info('Handled RPC request', {
         ...(requestId ? { requestId } : {}),
+        ...(context.requestContext.principalId
+          ? { principalId: context.requestContext.principalId }
+          : {}),
+        ...(context.requestContext.tenantId ? { tenantId: context.requestContext.tenantId } : {}),
         method: req.method,
         agentName: this.agentCard.name,
         durationMs: Date.now() - startedAt,
@@ -402,11 +492,9 @@ export abstract class A2AServer {
     method: string,
     req?: Request,
   ): Promise<Task> {
-    const principalId = (req as RequestWithAuth)?.principalId as string | undefined;
-    const tenantId = (req as RequestWithAuth)?.tenantId as string | undefined;
-    const pushNotificationConfig = params.configuration?.pushNotificationConfig
-      ? await this.normalizePushNotificationConfig(params.configuration.pushNotificationConfig)
-      : undefined;
+    const requestContext = req ? getRequestContext(req) : undefined;
+    const principalId = requestContext?.principalId;
+    const tenantId = requestContext?.tenantId;
 
     let task: Task | null = null;
 
@@ -415,10 +503,7 @@ export abstract class A2AServer {
       if (!task) {
         throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
       }
-      if (task.principalId && principalId && task.principalId !== principalId) {
-        throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
-      }
-      if (task.tenantId && tenantId && task.tenantId !== tenantId) {
+      if (requestContext && !this.canAccessTask(task, requestContext)) {
         throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
       }
     } else {
@@ -436,6 +521,10 @@ export abstract class A2AServer {
         tenantId ? { tenantId } : {},
       );
     }
+
+    const pushNotificationConfig = params.configuration?.pushNotificationConfig
+      ? await this.normalizePushNotificationConfig(params.configuration.pushNotificationConfig)
+      : undefined;
 
     if (!task) {
       throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
@@ -503,8 +592,9 @@ export abstract class A2AServer {
   > {
     try {
       await validateSafeUrl(config.url, {
-        allowLocalhost: this.options.allowLocalhost ?? true,
+        allowLocalhost: this.options.allowLocalhost ?? process.env.NODE_ENV !== 'production',
         allowPrivateNetworks: this.options.allowPrivateNetworks ?? false,
+        allowUnresolvedHostnames: this.options.allowUnresolvedHostnames ?? false,
       });
 
       return { ...config };
@@ -562,7 +652,18 @@ export abstract class A2AServer {
       this.taskManager.updateTaskState(task.id, 'completed');
       span.setStatus({ code: SpanStatusCode.OK });
     } catch (error: unknown) {
-      this.taskManager.updateTaskState(task.id, 'failed');
+      try {
+        this.taskManager.updateTaskState(task.id, 'failed');
+      } catch (lifecycleError) {
+        if (
+          lifecycleError instanceof TaskLifecycleError &&
+          lifecycleError.code === 'TASK_TERMINAL'
+        ) {
+          span.setStatus({ code: SpanStatusCode.OK, message: 'Task already terminal' });
+          return;
+        }
+        throw lifecycleError;
+      }
       span.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
       throw error;
     } finally {
@@ -575,13 +676,210 @@ export abstract class A2AServer {
    */
   abstract handleTask(task: Task, message: Message): Promise<Artifact[]>;
 
-  public start(port: number) {
-    return this.app.listen(port, () => {
+  public start(port: number): HttpServer {
+    this.httpServer = this.app.listen(port, () => {
       logger.info(`A2A Server listening on port ${port}`);
     });
+    return this.httpServer;
   }
 
-  public stop() {
+  public async stop(): Promise<void> {
     this.streamer.stop();
+    if (this.httpServer) {
+      await new Promise<void>((resolve, reject) => {
+        this.httpServer?.close((error?: Error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }).catch((error: unknown) => {
+        if (!(error instanceof Error) || !error.message.includes('Server is not running')) {
+          throw error;
+        }
+      });
+      this.httpServer = undefined;
+    }
+    const storage = this.options.taskStorage as { close?: () => void } | undefined;
+    storage?.close?.();
+  }
+
+  private isOriginAllowed(req: Request): boolean {
+    const origin = req.header('origin');
+    if (!origin) {
+      return !this.options.requireOrigin;
+    }
+
+    const allowedOrigins = this.options.allowedOrigins ?? [];
+    if (allowedOrigins.length === 0) {
+      return process.env.NODE_ENV !== 'production';
+    }
+
+    return allowedOrigins.includes(origin);
+  }
+
+  private filterTasksByContext(tasks: Task[], context: RequestContext): Task[] {
+    if (!this.shouldEnforceTaskOwnership(context)) {
+      return tasks;
+    }
+
+    return tasks.filter((task) => this.canAccessTask(task, context));
+  }
+
+  private canAccessTask(task: Task, context: RequestContext): boolean {
+    if (!this.shouldEnforceTaskOwnership(context)) {
+      return true;
+    }
+
+    if (task.principalId && task.principalId !== context.principalId) {
+      return false;
+    }
+    if (task.tenantId && task.tenantId !== context.tenantId) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private shouldEnforceTaskOwnership(context: RequestContext): boolean {
+    return Boolean(this.authMiddleware) || context.authMethod !== 'anonymous';
+  }
+
+  private async resolveIdempotency(
+    req: Request,
+    rpcReq: JsonRpcRequest,
+    requestContext: RequestContext,
+    res: Response,
+  ): Promise<IdempotencyResolution | null | undefined> {
+    if (!this.isIdempotentMethod(rpcReq.method)) {
+      return undefined;
+    }
+
+    const key = req.header('idempotency-key');
+    if (!key) {
+      return undefined;
+    }
+
+    const scope = this.buildIdempotencyScope(req, rpcReq.method, requestContext);
+    const fingerprint = buildIdempotencyFingerprint({
+      method: rpcReq.method,
+      params: rpcReq.params ?? null,
+    });
+
+    const nextContext: RequestContext = {
+      ...requestContext,
+      idempotency: {
+        key,
+        scope,
+        fingerprint,
+        replayed: false,
+      },
+    };
+    attachRequestContext(req, nextContext);
+
+    const existing = await this.idempotencyStore.get(scope, key);
+    if (!existing) {
+      return { scope, key, fingerprint };
+    }
+
+    if (existing.fingerprint !== fingerprint) {
+      throw new JsonRpcError(ErrorCodes.IdempotencyConflict, 'Idempotency key reuse conflict', {
+        key,
+        scope,
+      });
+    }
+
+    if (existing.result.kind === 'error') {
+      res.json({
+        jsonrpc: '2.0',
+        error: existing.result.error,
+        id: rpcReq.id || null,
+      });
+      return null;
+    }
+
+    res.json({
+      jsonrpc: '2.0',
+      result: this.decorateIdempotentResult(
+        existing.result.value,
+        { scope, key, fingerprint },
+        true,
+      ),
+      id: rpcReq.id || null,
+    });
+    return null;
+  }
+
+  private decorateIdempotentResult(
+    result: unknown,
+    idempotency: IdempotencyResolution,
+    replayed: boolean,
+  ): unknown {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      return result;
+    }
+
+    const record = {
+      key: idempotency.key,
+      scope: idempotency.scope,
+      fingerprint: idempotency.fingerprint,
+      replayed,
+    };
+    const currentMetadata =
+      'metadata' in result && result.metadata && typeof result.metadata === 'object'
+        ? (result.metadata as Record<string, unknown>)
+        : {};
+
+    return {
+      ...result,
+      metadata: {
+        ...currentMetadata,
+        idempotency: record,
+      },
+    };
+  }
+
+  private buildIdempotencyScope(
+    req: Request,
+    method: string,
+    requestContext: RequestContext,
+  ): string {
+    const principalScope =
+      requestContext.principalId ??
+      requestContext.subject ??
+      req.ip ??
+      req.socket?.remoteAddress ??
+      'anonymous';
+    return [
+      'rpc',
+      method,
+      requestContext.tenantId ?? 'global',
+      principalScope,
+      requestContext.authMethod,
+    ].join(':');
+  }
+
+  private isIdempotentMethod(method: string): boolean {
+    return (
+      method === 'message/send' ||
+      method === 'message/stream' ||
+      method === 'tasks/cancel' ||
+      method === 'tasks/pushNotification/set'
+    );
+  }
+
+  private toLifecycleJsonRpcError(error: TaskLifecycleError): JsonRpcError {
+    if (error.code === 'INVALID_TASK_TRANSITION' || error.code === 'TASK_TERMINAL') {
+      return new JsonRpcError(ErrorCodes.InvalidTaskTransition, error.message, {
+        taskId: error.taskId,
+        currentState: error.currentState,
+        nextState: error.nextState,
+      });
+    }
+
+    return new JsonRpcError(ErrorCodes.InternalError, error.message, {
+      taskId: error.taskId,
+    });
   }
 }

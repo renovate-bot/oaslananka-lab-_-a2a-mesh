@@ -1,6 +1,6 @@
 <div align="center">
   <h1>a2a-mesh</h1>
-  <p><strong>Production-grade TypeScript runtime for Google's Agent-to-Agent (A2A) Protocol</strong></p>
+  <p><strong>Security-hardened TypeScript runtime for Google's Agent-to-Agent (A2A) Protocol</strong></p>
   <p>The missing infrastructure layer for multi-agent AI systems.</p>
 </div>
 
@@ -29,24 +29,24 @@ Every AI framework has its own way of making agents talk to each other. Getting 
 agent to delegate work to an OpenAI-backed agent over HTTP usually means rebuilding transport,
 auth, retries, streaming, task state, discovery, and observability from scratch.
 
-**Google's A2A Protocol** defines the wire standard. `a2a-mesh` is the production runtime that
-makes it practical to build with.
+**Google's A2A Protocol** defines the wire standard. `a2a-mesh` is the runtime, registry, and
+integration toolkit that makes it practical to build with.
 
 ---
 
 ## What you get
 
-| Capability                    | Details                                                                                   |
-| ----------------------------- | ----------------------------------------------------------------------------------------- |
-| **A2A Protocol v1.0 runtime** | JSON-RPC handling, SSE streaming, push notifications, health endpoints, agent cards       |
-| **Multi-framework adapters**  | OpenAI, Anthropic, LangChain, Google ADK, LlamaIndex, CrewAI HTTP bridge                  |
-| **Registry control plane**    | Agent discovery, capability matching, health polling, SSE registry updates, Redis backend |
-| **Enterprise security**       | JWT auth hooks, tenant isolation, SSRF prevention, rate limiting                          |
-| **Observability**             | OpenTelemetry spans, structured audit logs, Grafana and alerting artifacts                |
-| **Network resilience**        | Retry, exponential backoff, jitter, timeouts, circuit breaker primitives                  |
-| **Transport extensions**      | WebSocket transport package today, gRPC transport package in experimental form            |
-| **Testing toolkit**           | `A2ATestServer`, `MockA2AClient`, fixtures, matchers, integration tests                   |
-| **Scaffolding CLI**           | `npx create-a2a-mesh` for new agents and multi-agent starter packs                        |
+| Capability                    | Details                                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **A2A Protocol v1.0 runtime** | JSON-RPC handling, SSE streaming, push notifications, health endpoints, agent cards                         |
+| **Multi-framework adapters**  | OpenAI, Anthropic, LangChain, Google ADK, LlamaIndex, CrewAI HTTP bridge                                    |
+| **Registry control plane**    | Agent discovery, capability matching, health polling, SSE registry updates, Redis backend                   |
+| **Security controls**         | Verified JWT/JWKS and API-key auth, typed request context, tenant-aware task access, SSRF and origin policy |
+| **Observability**             | OpenTelemetry span hooks, structured audit logs, registry metrics, Grafana and alerting artifacts           |
+| **Network resilience**        | Retry, exponential backoff, jitter, timeouts, circuit breaker primitives                                    |
+| **Transport extensions**      | WebSocket transport package today, gRPC transport package in experimental form                              |
+| **Testing toolkit**           | `A2ATestServer`, `MockA2AClient`, fixtures, matchers, integration tests                                     |
+| **Scaffolding CLI**           | `npx create-a2a-mesh` for new agents and multi-agent starter packs                                          |
 
 ---
 

@@ -21,16 +21,7 @@ export async function startTestServer(agent: A2AServer): Promise<StartedServer> 
   return {
     server,
     url,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }),
+    close: () => agent.stop(),
   };
 }
 

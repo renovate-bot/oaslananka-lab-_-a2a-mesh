@@ -26,11 +26,11 @@ export function TaskStream({ tasks, loading, error, connected, selectedAgentId }
     : tasks;
 
   return (
-    <section className="glass-panel rounded-[34px] border border-white/10 p-6 shadow-[0_30px_80px_rgba(2,8,23,0.35)]">
+    <section className="rounded-lg border border-white/10 bg-[#111820] p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-100">Task stream</p>
-          <h2 className="mesh-display mt-2 text-3xl font-bold">Live execution feed</h2>
+          <p className="text-[11px] uppercase tracking-[0.32em] text-slate-400">Task stream</p>
+          <h2 className="mt-2 text-xl font-semibold text-white">Recent task events</h2>
         </div>
         <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-200">
           <span
@@ -46,9 +46,9 @@ export function TaskStream({ tasks, loading, error, connected, selectedAgentId }
       {error ? <p className="mt-6 text-sm text-rose-200/90">{error}</p> : null}
 
       {!loading && visibleTasks.length === 0 ? (
-        <div className="mt-8 rounded-[26px] border border-white/10 bg-white/5 px-5 py-10 text-center text-slate-300">
+        <div className="mt-8 rounded-lg border border-white/10 bg-white/5 px-5 py-10 text-center text-slate-300">
           <Sparkles className="mx-auto mb-3 text-cyan-200" size={24} />
-          No recent task events yet.
+          No recent task activity yet.
         </div>
       ) : null}
 
@@ -56,7 +56,7 @@ export function TaskStream({ tasks, loading, error, connected, selectedAgentId }
         {visibleTasks.map((task) => (
           <article
             key={`${task.agentId}-${task.taskId}`}
-            className="rounded-[26px] border border-white/10 bg-slate-950/35 px-4 py-4"
+            className="rounded-lg border border-white/10 bg-slate-950/35 px-4 py-4"
           >
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-50">

@@ -25,7 +25,7 @@ describe('Registry Integration', () => {
   });
 
   it('registers, searches, lists and manages agent records', async () => {
-    const server = new RegistryServer();
+    const server = new RegistryServer({ allowUnresolvedHostnames: true });
     const listener = server.start(0);
     handles.push(listener);
 
@@ -77,11 +77,11 @@ describe('Registry Integration', () => {
     });
     expect(deletedResponse.status).toBe(204);
 
-    server.stop();
+    await server.stop();
   });
 
   it('returns validation and not-found responses and streams registry updates', async () => {
-    const server = new RegistryServer();
+    const server = new RegistryServer({ allowUnresolvedHostnames: true });
     const listener = server.start(0);
     handles.push(listener);
 
@@ -126,7 +126,7 @@ describe('Registry Integration', () => {
     );
 
     await events.return(undefined);
-    server.stop();
+    await server.stop();
   });
 
   it('marks agents healthy and unhealthy during scheduled health checks', async () => {
@@ -162,7 +162,11 @@ describe('Registry Integration', () => {
       throw new Error('offline');
     });
 
-    const server = new RegistryServer({ storage, allowLocalhost: true });
+    const server = new RegistryServer({
+      storage,
+      allowLocalhost: true,
+      allowUnresolvedHostnames: true,
+    });
     await (
       server as unknown as {
         executeHealthChecks: (agents: (typeof healthyAgent)[]) => Promise<void>;
@@ -172,6 +176,6 @@ describe('Registry Integration', () => {
     expect((await storage.get('healthy'))?.status).toBe('healthy');
     expect((await storage.get('failing'))?.status).toBe('unhealthy');
 
-    server.stop();
+    await server.stop();
   });
 });

@@ -1,4 +1,5 @@
 export type AgentStatus = 'healthy' | 'unhealthy' | 'unknown';
+export type RegistryAccessMode = 'authenticated' | 'readonly-public';
 
 export interface AgentSkill {
   id: string;
@@ -13,6 +14,8 @@ export interface RegisteredAgent {
   status: AgentStatus;
   tags?: string[];
   skills?: string[];
+  tenantId?: string;
+  isPublic?: boolean;
   registeredAt?: string;
   lastHeartbeatAt?: string;
   consecutiveFailures?: number;
@@ -78,44 +81,67 @@ export interface RegistryTaskEvent {
 
 export type AgentStreamPayload = RegisteredAgent | { id: string; deleted: true };
 
+export interface AgentFetchResult {
+  agents: RegisteredAgent[];
+  accessMode: RegistryAccessMode;
+}
+
+export class RegistryApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 const BASE = (import.meta.env.VITE_REGISTRY_URL ?? '/api').replace(/\/$/, '');
 
 function endpoint(path: string): string {
   return `${BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-export async function fetchAgents(): Promise<RegisteredAgent[]> {
-  const response = await fetch(endpoint('/agents'));
-  if (!response.ok) {
-    throw new Error(`Registry error: ${response.status}`);
+async function requestJson(path: string): Promise<Response> {
+  return fetch(endpoint(path), {
+    credentials: 'include',
+  });
+}
+
+export async function fetchAgents(): Promise<AgentFetchResult> {
+  const privateResponse = await requestJson('/agents');
+  if (privateResponse.ok) {
+    return {
+      agents: (await privateResponse.json()) as RegisteredAgent[],
+      accessMode: 'authenticated',
+    };
   }
 
-  return (await response.json()) as RegisteredAgent[];
+  if (privateResponse.status === 401 || privateResponse.status === 403) {
+    const publicResponse = await requestJson('/agents?public=true');
+    if (publicResponse.ok) {
+      return {
+        agents: (await publicResponse.json()) as RegisteredAgent[],
+        accessMode: 'readonly-public',
+      };
+    }
+  }
+
+  throw new RegistryApiError(`Registry error: ${privateResponse.status}`, privateResponse.status);
 }
 
 export async function fetchMetrics(): Promise<RegistryMetrics> {
-  const response = await fetch(endpoint('/metrics/summary'));
+  const response = await requestJson('/metrics/summary');
   if (!response.ok) {
-    return {
-      registrations: 0,
-      searches: 0,
-      heartbeats: 0,
-      agentCount: 0,
-      healthyAgents: 0,
-      unhealthyAgents: 0,
-      unknownAgents: 0,
-      activeTenants: 0,
-      publicAgents: 0,
-    };
+    return emptyMetrics();
   }
 
   return (await response.json()) as RegistryMetrics;
 }
 
 export async function fetchRecentTasks(limit = 30): Promise<RegistryTaskEvent[]> {
-  const response = await fetch(endpoint(`/tasks/recent?limit=${limit}`));
+  const response = await requestJson(`/tasks/recent?limit=${limit}`);
   if (!response.ok) {
-    throw new Error(`Task stream error: ${response.status}`);
+    throw new RegistryApiError(`Task stream error: ${response.status}`, response.status);
   }
 
   return (await response.json()) as RegistryTaskEvent[];
@@ -161,4 +187,18 @@ export function subscribeToTaskStream(
   }
 
   return () => eventSource.close();
+}
+
+export function emptyMetrics(): RegistryMetrics {
+  return {
+    registrations: 0,
+    searches: 0,
+    heartbeats: 0,
+    agentCount: 0,
+    healthyAgents: 0,
+    unhealthyAgents: 0,
+    unknownAgents: 0,
+    activeTenants: 0,
+    publicAgents: 0,
+  };
 }

@@ -66,8 +66,7 @@ async function ensureRegistryStarted(config: ReturnType<typeof getDemoConfig>) {
   return {
     registryClient,
     shutdown: () => {
-      registry.stop();
-      server.close();
+      void registry.stop();
     },
   };
 }
@@ -117,9 +116,9 @@ async function main() {
 
   const closeAll = () => {
     clearInterval(heartbeatInterval);
-    researcher.stop();
-    writer.stop();
-    orchestrator.stop();
+    void researcher.stop();
+    void writer.stop();
+    void orchestrator.stop();
     researcherServer.close();
     writerServer.close();
     orchestratorServer.close();

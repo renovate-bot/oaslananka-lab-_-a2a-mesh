@@ -1,6 +1,6 @@
 # a2a-mesh
 
-Production-ready TypeScript runtime for Google's Agent2Agent (A2A) Protocol v1.0.
+Security-hardened TypeScript runtime for Google's Agent2Agent (A2A) Protocol v1.0.
 
 ## Public packages
 

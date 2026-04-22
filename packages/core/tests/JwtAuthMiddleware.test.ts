@@ -60,21 +60,98 @@ describe('JwtAuthMiddleware', () => {
     ).rejects.toThrow('Invalid API key');
   });
 
-  it('reads bearer tokens for http auth schemes', async () => {
+  it('rejects bearer tokens when no verifier is configured for http auth schemes', async () => {
     const payload = encodeSegment({ sub: 'user-1' });
     const token = `aaa.${payload}.bbb`;
     const middleware = new JwtAuthMiddleware({
       securitySchemes: [{ type: 'http', id: 'bearer', scheme: 'bearer' }],
     });
 
-    const result = await middleware.authenticateRequest({
-      header(name: string) {
-        return name === 'authorization' ? `Bearer ${token}` : undefined;
-      },
-      query: {},
-    } as never);
+    await expect(
+      middleware.authenticateRequest({
+        header(name: string) {
+          return name === 'authorization' ? `Bearer ${token}` : undefined;
+        },
+        query: {},
+      } as never),
+    ).rejects.toThrow('Bearer JWT verification is not configured');
+  });
 
-    expect(result.subject).toBe('user-1');
+  it('verifies bearer tokens for http auth schemes using JWKS', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    const jwk = await exportJWK(publicKey);
+    jwk.use = 'sig';
+    jwk.kid = 'bearer-key';
+
+    const server = createServer((req, res) => {
+      if (req.url === '/jwks') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ keys: [jwk] }));
+        return;
+      }
+
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to get bearer JWKS test server address');
+    }
+    const issuerBaseUrl = `http://127.0.0.1:${address.port}`;
+
+    const token = await new SignJWT({ tenantId: 'tenant-1', scope: 'tasks:read tasks:write' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'bearer-key' })
+      .setSubject('bearer-user')
+      .setIssuer(issuerBaseUrl)
+      .setAudience('a2a-mesh')
+      .setExpirationTime('2h')
+      .sign(privateKey);
+
+    const middleware = new JwtAuthMiddleware({
+      securitySchemes: [
+        {
+          type: 'http',
+          id: 'bearer',
+          scheme: 'bearer',
+          jwksUri: `${issuerBaseUrl}/jwks`,
+          issuer: issuerBaseUrl,
+          audience: 'a2a-mesh',
+        },
+      ],
+    });
+
+    try {
+      const result = await middleware.authenticateRequest({
+        header(name: string) {
+          return name === 'authorization' ? `Bearer ${token}` : undefined;
+        },
+        query: {},
+      } as never);
+
+      expect(result.subject).toBe('bearer-user');
+      expect(result.principalId).toBe('bearer-user');
+      expect(result.tenantId).toBe('tenant-1');
+      expect(result.scopes).toEqual(['tasks:read', 'tasks:write']);
+
+      const tokenWithoutPrincipal = await new SignJWT({ tenantId: 'tenant-1' })
+        .setProtectedHeader({ alg: 'RS256', kid: 'bearer-key' })
+        .setIssuer(issuerBaseUrl)
+        .setAudience('a2a-mesh')
+        .setExpirationTime('2h')
+        .sign(privateKey);
+
+      await expect(
+        middleware.authenticateRequest({
+          header(name: string) {
+            return name === 'authorization' ? `Bearer ${tokenWithoutPrincipal}` : undefined;
+          },
+          query: {},
+        } as never),
+      ).rejects.toThrow('JWT missing principal claim');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it('returns JSON-RPC unauthorized responses from express middleware', async () => {

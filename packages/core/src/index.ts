@@ -8,6 +8,7 @@ export * from './utils/schema-validator.js';
 export * from './server/A2AServer.js';
 export * from './server/SSEStreamer.js';
 export * from './server/TaskManager.js';
+export * from './server/IdempotencyStore.js';
 export * from './server/PushNotificationService.js';
 export * from './server/CircuitBreaker.js';
 export * from './storage/ITaskStorage.js';

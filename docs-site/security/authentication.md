@@ -3,5 +3,5 @@
 `a2a-mesh` supports:
 
 - API keys
-- bearer tokens
+- verified bearer JWTs with JWKS configuration
 - OIDC discovery and JWKS validation

@@ -42,6 +42,8 @@ export const ErrorCodes = {
   RateLimitExceeded: -32029,
   Unauthorized: -32040,
   ExtensionRequired: -32041,
+  InvalidTaskTransition: -32042,
+  IdempotencyConflict: -32043,
 } as const;
 
 export class JsonRpcError extends Error {

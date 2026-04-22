@@ -10,14 +10,22 @@
 
 ## API keys
 
-API keys can be validated from either headers or query parameters.
+API keys can be validated from either headers or query parameters. Prefer headers for anything beyond local tooling. A key can be a plain string or a credential object that binds the request to a principal, tenant, scopes, and roles.
 
 ```ts
 const server = new MyServer(card, {
   auth: {
     securitySchemes: [{ type: 'apiKey', id: 'api-key', in: 'header', name: 'x-api-key' }],
     apiKeys: {
-      'api-key': ['dev-secret', 'ci-secret'],
+      'api-key': [
+        {
+          value: 'dev-secret',
+          principalId: 'svc-demo',
+          tenantId: 'tenant-demo',
+          scopes: ['tasks:write'],
+          roles: ['agent'],
+        },
+      ],
     },
   },
 });
@@ -25,7 +33,32 @@ const server = new MyServer(card, {
 
 ## Bearer tokens
 
-HTTP bearer schemes decode bearer tokens and expose claims on the request auth context.
+HTTP bearer schemes verify JWTs before any claims are trusted. Bearer auth requires a `jwksUri`; decode-only bearer tokens are rejected.
+
+```ts
+const server = new MyServer(card, {
+  auth: {
+    securitySchemes: [
+      {
+        type: 'http',
+        id: 'bearer',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        jwksUri: 'https://issuer.example/.well-known/jwks.json',
+        issuer: 'https://issuer.example/',
+        audience: 'a2a-mesh',
+      },
+    ],
+  },
+});
+```
+
+Verified JWT claims are normalized into a typed request context:
+
+- `principalId`: `principalId`, `sub`, `client_id`, or `azp`; tokens without a principal claim are rejected
+- `tenantId`: `tenantId`, `tenant_id`, or `org_id`
+- `scopes`: `scope`, `scp`, or `scopes`
+- `roles`: `role` or `roles`
 
 ## OIDC
 
@@ -44,4 +77,5 @@ OIDC support uses discovery and JWKS resolution.
 
 - Use `a2a-mesh` client interceptors to attach and refresh auth headers.
 - Prefer short-lived bearer tokens in production.
+- Configure issuer and audience checks for every production bearer or OIDC scheme.
 - Avoid query-parameter API keys except for tightly controlled internal tooling.

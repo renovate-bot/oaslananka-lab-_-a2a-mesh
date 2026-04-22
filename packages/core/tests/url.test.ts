@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { promises as dns } from 'node:dns';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { isPrivateIP, validateSafeUrl } from '../src/security/url.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('isPrivateIP', () => {
   it('correctly identifies private IPv4 addresses', () => {
@@ -30,6 +35,7 @@ describe('isPrivateIP', () => {
 
 describe('validateSafeUrl', () => {
   it('allows standard https URLs', async () => {
+    vi.spyOn(dns, 'resolve').mockResolvedValue(['93.184.216.34']);
     const url = await validateSafeUrl('https://example.com');
     expect(url.hostname).toBe('example.com');
   });
@@ -57,5 +63,31 @@ describe('validateSafeUrl', () => {
   it('allows localhost when allowLocalhost is true', async () => {
     const url = await validateSafeUrl('http://localhost', { allowLocalhost: true });
     expect(url.hostname).toBe('localhost');
+  });
+
+  it('fails closed when DNS resolution fails by default', async () => {
+    vi.spyOn(dns, 'resolve').mockRejectedValue(new Error('dns down'));
+
+    await expect(validateSafeUrl('https://unresolved.example')).rejects.toThrow(
+      'SSRF Prevention: Hostname could not be resolved',
+    );
+  });
+
+  it('allows unresolved hostnames only with an explicit override', async () => {
+    vi.spyOn(dns, 'resolve').mockRejectedValue(new Error('dns down'));
+
+    const url = await validateSafeUrl('https://unresolved.example', {
+      allowUnresolvedHostnames: true,
+    });
+
+    expect(url.hostname).toBe('unresolved.example');
+  });
+
+  it('does not swallow private DNS resolution failures as generic DNS failures', async () => {
+    vi.spyOn(dns, 'resolve').mockResolvedValue(['127.0.0.1']);
+
+    await expect(validateSafeUrl('https://private.example')).rejects.toThrow(
+      'SSRF Prevention: Hostname resolves to a private IP address',
+    );
   });
 });

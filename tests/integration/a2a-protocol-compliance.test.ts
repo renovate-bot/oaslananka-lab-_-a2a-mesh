@@ -56,6 +56,7 @@ class ComplianceAgent extends A2AServer {
 
 describe('A2A Protocol v1.0 Compliance', () => {
   let handle: StartedServer;
+  const authHeaders = { 'x-api-key': 'valid-key' };
 
   beforeAll(async () => {
     handle = await startTestServer(new ComplianceAgent());
@@ -95,7 +96,7 @@ describe('A2A Protocol v1.0 Compliance', () => {
 
   describe('message/send', () => {
     it('successful requests transition to a completed task', async () => {
-      const client = new A2AClient(handle.url);
+      const client = new A2AClient(handle.url, { headers: authHeaders });
       const createdTask = await client.sendMessage({
         message: createUserMessage('hello compliance'),
       });
@@ -106,9 +107,14 @@ describe('A2A Protocol v1.0 Compliance', () => {
     });
 
     it('invalid params return InvalidParams', async () => {
-      const body = await postJsonRpc<{ error: { code: number } }>(handle.url, 'message/send', {
-        message: {},
-      });
+      const body = await postJsonRpc<{ error: { code: number } }>(
+        handle.url,
+        'message/send',
+        {
+          message: {},
+        },
+        authHeaders,
+      );
 
       expect(body.error).toBeDefined();
       expect(body.error.code).toBe(ErrorCodes.InvalidParams);
@@ -117,7 +123,7 @@ describe('A2A Protocol v1.0 Compliance', () => {
 
   describe('Extension Negotiation', () => {
     it('unsupported optional extensions are skipped gracefully', async () => {
-      const client = new A2AClient(handle.url);
+      const client = new A2AClient(handle.url, { headers: authHeaders });
       const createdTask = await client.sendMessage({
         message: createUserMessage('extension test'),
         configuration: {
@@ -130,12 +136,17 @@ describe('A2A Protocol v1.0 Compliance', () => {
     });
 
     it('unsupported required extensions return ExtensionRequired', async () => {
-      const body = await postJsonRpc<{ error: { code: number } }>(handle.url, 'message/send', {
-        message: createUserMessage('required extension test'),
-        configuration: {
-          extensions: [{ uri: 'https://unsupported-required.ext/v1', required: true }],
+      const body = await postJsonRpc<{ error: { code: number } }>(
+        handle.url,
+        'message/send',
+        {
+          message: createUserMessage('required extension test'),
+          configuration: {
+            extensions: [{ uri: 'https://unsupported-required.ext/v1', required: true }],
+          },
         },
-      });
+        authHeaders,
+      );
 
       expect(body.error).toBeDefined();
       expect(body.error.code).toBe(ErrorCodes.ExtensionRequired);
@@ -168,7 +179,7 @@ describe('A2A Protocol v1.0 Compliance', () => {
 
   describe('tasks/get', () => {
     it('returns an existing task', async () => {
-      const client = new A2AClient(handle.url);
+      const client = new A2AClient(handle.url, { headers: authHeaders });
       const task = await client.sendMessage({
         message: createUserMessage('get test'),
       });
@@ -178,9 +189,14 @@ describe('A2A Protocol v1.0 Compliance', () => {
     });
 
     it('returns TaskNotFound for unknown task ids', async () => {
-      const body = await postJsonRpc<{ error: { code: number } }>(handle.url, 'tasks/get', {
-        taskId: 'non-existent-task-id',
-      });
+      const body = await postJsonRpc<{ error: { code: number } }>(
+        handle.url,
+        'tasks/get',
+        {
+          taskId: 'non-existent-task-id',
+        },
+        authHeaders,
+      );
 
       expect(body.error).toBeDefined();
       expect(body.error.code).toBe(ErrorCodes.TaskNotFound);

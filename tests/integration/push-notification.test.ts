@@ -101,7 +101,11 @@ describe('Push Notification Lifecycle', () => {
 
     await new Promise<void>((resolve) => {
       const poll = setInterval(() => {
-        if (webhookReceiver.receivedPayloads.length > 0) {
+        if (
+          webhookReceiver.receivedPayloads.some(
+            (payload) => payload.id === task.id && payload.status.state === 'completed',
+          )
+        ) {
           clearInterval(poll);
           resolve();
         }

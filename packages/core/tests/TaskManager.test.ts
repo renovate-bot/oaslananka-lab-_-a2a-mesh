@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TaskManager } from '../src/server/TaskManager.js';
+import { TaskLifecycleError, TaskManager } from '../src/server/TaskManager.js';
 
 describe('TaskManager', () => {
   it('tracks tasks, lifecycle counts, artifacts, history and push notifications', () => {
@@ -71,6 +71,8 @@ describe('TaskManager', () => {
     );
     expect(storedTask?.metadata).toEqual(
       expect.objectContaining({
+        createdAt: expect.any(String),
+        startedAt: expect.any(String),
         message: 'Processing started',
         jobId: 'job-1',
       }),
@@ -114,5 +116,43 @@ describe('TaskManager', () => {
       manager.setPushNotification('missing', { url: 'https://example.com/hook' }),
     ).toBeUndefined();
     expect(manager.getPushNotification('missing')).toBeUndefined();
+  });
+
+  it('rejects invalid transitions and terminal mutations', () => {
+    const manager = new TaskManager();
+    const task = manager.createTask();
+
+    manager.updateTaskState(task.id, 'completed');
+
+    expect(() => manager.updateTaskState(task.id, 'working')).toThrow(TaskLifecycleError);
+    expect(() =>
+      manager.addArtifact(task.id, {
+        artifactId: 'artifact-terminal',
+        parts: [{ type: 'text', text: 'late artifact' }],
+        index: 0,
+      }),
+    ).toThrow(/terminal task/i);
+    expect(() => manager.setPushNotification(task.id, { url: 'https://example.com/hook' })).toThrow(
+      /terminal task/i,
+    );
+  });
+
+  it('captures timing metadata for terminal states', async () => {
+    const manager = new TaskManager();
+    const task = manager.createTask();
+
+    manager.updateTaskState(task.id, 'working');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    manager.updateTaskState(task.id, 'failed');
+
+    expect(manager.getTask(task.id)?.metadata).toEqual(
+      expect.objectContaining({
+        createdAt: expect.any(String),
+        startedAt: expect.any(String),
+        endedAt: expect.any(String),
+        failedAt: expect.any(String),
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 });

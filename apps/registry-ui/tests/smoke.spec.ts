@@ -1,104 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('renders offline state without crashing', async ({ page }) => {
-  await page.goto('/');
-
-  await expect(page.getByText('a2a-mesh')).toBeVisible();
-  await expect(page.getByText('Registry connectivity warning')).toBeVisible();
-  await expect(page.getByText('Registry unavailable')).toBeVisible();
-});
-
-test('renders mocked online overview, topology, and task stream', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 'agent-1',
-          url: 'http://localhost:3001',
-          status: 'healthy',
-          card: {
-            name: 'Researcher Agent',
-            description: 'Finds and synthesizes information.',
-            version: '1.0.0',
-            transport: 'http',
-            capabilities: { streaming: true, mcpCompatible: true },
-            skills: [
-              {
-                id: 'research',
-                name: 'Research',
-                description: 'Researches topics',
-                tags: ['web'],
-              },
-            ],
-          },
-        },
-        {
-          id: 'agent-2',
-          url: 'http://localhost:3002',
-          status: 'unhealthy',
-          consecutiveFailures: 2,
-          card: {
-            name: 'Writer Agent',
-            description: 'Polishes output into a report.',
-            version: '1.0.0',
-            transport: 'http',
-            capabilities: { streaming: true },
-            skills: [
-              {
-                id: 'write',
-                name: 'Write',
-                description: 'Creates polished output',
-                tags: ['text'],
-              },
-            ],
-          },
-        },
-      ]),
-    });
-  });
-
-  await page.route('**/api/metrics/summary', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        registrations: 12,
-        searches: 8,
-        heartbeats: 42,
-        agentCount: 2,
-        healthyAgents: 1,
-        unhealthyAgents: 1,
-        unknownAgents: 0,
-        activeTenants: 1,
-        publicAgents: 2,
-      }),
-    });
-  });
-
-  await page.route('**/api/tasks/recent?limit=30', async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          taskId: 'task-1',
-          agentId: 'agent-1',
-          agentName: 'Researcher Agent',
-          agentUrl: 'http://localhost:3001',
-          status: 'completed',
-          updatedAt: '2026-04-06T10:00:00.000Z',
-          summary: 'Collected and summarized research findings.',
-          historyCount: 3,
-          artifactCount: 1,
-          task: {
-            id: 'task-1',
-            status: { state: 'completed', timestamp: '2026-04-06T10:00:00.000Z' },
-          },
-        },
-      ]),
-    });
-  });
-
-  await page.addInitScript(() => {
+function installMockEventSource(page: Parameters<typeof test>[0]['page']) {
+  return page.addInitScript(() => {
     class MockEventSource {
       url: string;
       onmessage: ((event: MessageEvent<string>) => void) | null = null;
@@ -134,6 +37,7 @@ test('renders mocked online overview, topology, and task stream', async ({ page 
                   id: 'agent-1',
                   url: 'http://localhost:3001',
                   status: 'healthy',
+                  tenantId: 'tenant-a',
                   card: {
                     name: 'Researcher Agent',
                     description: 'Finds and synthesizes information.',
@@ -161,18 +65,170 @@ test('renders mocked online overview, topology, and task stream', async ({ page 
 
     window.EventSource = MockEventSource as unknown as typeof EventSource;
   });
+}
+
+test('renders readonly public discovery mode', async ({ page }) => {
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({ status: 401, body: 'Unauthorized' });
+  });
+  await page.route('**/api/agents?public=true', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'agent-public',
+          url: 'https://public.example/agent',
+          status: 'healthy',
+          isPublic: true,
+          card: {
+            name: 'Public Research Agent',
+            description: 'Publicly discoverable research endpoint.',
+            version: '1.0.0',
+            transport: 'http',
+            capabilities: { streaming: true },
+            skills: [{ id: 'public-research', name: 'Research', description: 'Finds facts' }],
+          },
+        },
+      ]),
+    });
+  });
+  await page.route('**/api/metrics/summary', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        registrations: 1,
+        searches: 0,
+        heartbeats: 0,
+        agentCount: 1,
+        healthyAgents: 1,
+        unhealthyAgents: 0,
+        unknownAgents: 0,
+        activeTenants: 0,
+        publicAgents: 1,
+      }),
+    });
+  });
+  await page.route('**/api/tasks/recent?limit=30', async (route) => {
+    await route.fulfill({ status: 401, body: 'Unauthorized' });
+  });
+  await installMockEventSource(page);
 
   await page.goto('/');
 
-  await expect(page.getByText('Researcher Agent')).toBeVisible();
-  await expect(page.getByText('Writer Agent')).toBeVisible();
+  await expect(page.getByText('a2a-mesh operator console')).toBeVisible();
+  await expect(page.getByText('Public discovery mode')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Public Research Agent' })).toBeVisible();
+  await expect(page.getByText('Live task feeds and admin actions are hidden')).toBeVisible();
+});
+
+test('renders authenticated fleet, topology, and task stream', async ({ page }) => {
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'agent-1',
+          url: 'http://localhost:3001',
+          status: 'healthy',
+          tenantId: 'tenant-a',
+          lastHeartbeatAt: '2026-04-06T10:04:00.000Z',
+          lastSuccessAt: '2026-04-06T10:02:00.000Z',
+          card: {
+            name: 'Researcher Agent',
+            description: 'Finds and synthesizes information.',
+            version: '1.0.0',
+            transport: 'http',
+            capabilities: { streaming: true, mcpCompatible: true },
+            skills: [
+              {
+                id: 'research',
+                name: 'Research',
+                description: 'Researches topics',
+                tags: ['web'],
+              },
+            ],
+          },
+        },
+        {
+          id: 'agent-2',
+          url: 'http://localhost:3002',
+          status: 'unhealthy',
+          tenantId: 'tenant-a',
+          consecutiveFailures: 2,
+          card: {
+            name: 'Writer Agent',
+            description: 'Polishes output into a report.',
+            version: '1.0.0',
+            transport: 'http',
+            capabilities: { streaming: true },
+            skills: [
+              {
+                id: 'write',
+                name: 'Write',
+                description: 'Creates polished output',
+                tags: ['text'],
+              },
+            ],
+          },
+        },
+      ]),
+    });
+  });
+
+  await page.route('**/api/metrics/summary', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        registrations: 12,
+        searches: 8,
+        heartbeats: 42,
+        agentCount: 2,
+        healthyAgents: 1,
+        unhealthyAgents: 1,
+        unknownAgents: 0,
+        activeTenants: 1,
+        publicAgents: 0,
+      }),
+    });
+  });
+
+  await page.route('**/api/tasks/recent?limit=30', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          taskId: 'task-1',
+          agentId: 'agent-1',
+          agentName: 'Researcher Agent',
+          agentUrl: 'http://localhost:3001',
+          status: 'completed',
+          updatedAt: '2026-04-06T10:00:00.000Z',
+          summary: 'Collected and summarized research findings.',
+          historyCount: 3,
+          artifactCount: 1,
+          task: {
+            id: 'task-1',
+            status: { state: 'completed', timestamp: '2026-04-06T10:00:00.000Z' },
+          },
+        },
+      ]),
+    });
+  });
+
+  await installMockEventSource(page);
+
+  await page.goto('/');
+
+  await expect(page.getByText('Operator mode')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Researcher Agent' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: /Writer Agent/ })).toBeVisible();
 
   await page.getByRole('button', { name: 'Live Topology' }).click();
   await expect(page.getByText('Live agent mesh')).toBeVisible();
 
   await page.getByRole('button', { name: 'Task Stream' }).click();
-  await expect(page.getByText('Live execution feed')).toBeVisible();
-  await expect(page.getByText('Drafting final report from research output.')).toBeVisible();
+  await expect(page.getByText('Recent task events')).toBeVisible();
+  await expect(page.getByText('Collected and summarized research findings.').first()).toBeVisible();
 });
 
 test('filters agents by search query', async ({ page }) => {
@@ -184,6 +240,7 @@ test('filters agents by search query', async ({ page }) => {
           id: 'agent-1',
           url: 'http://localhost:3001',
           status: 'healthy',
+          tenantId: 'tenant-a',
           card: {
             name: 'Researcher Agent',
             description: 'Finds facts',
@@ -197,6 +254,7 @@ test('filters agents by search query', async ({ page }) => {
           id: 'agent-2',
           url: 'http://localhost:3002',
           status: 'healthy',
+          tenantId: 'tenant-a',
           card: {
             name: 'Writer Agent',
             description: 'Writes reports',
@@ -209,7 +267,6 @@ test('filters agents by search query', async ({ page }) => {
       ]),
     });
   });
-
   await page.route('**/api/metrics/summary', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -222,29 +279,18 @@ test('filters agents by search query', async ({ page }) => {
         unhealthyAgents: 0,
         unknownAgents: 0,
         activeTenants: 1,
-        publicAgents: 2,
+        publicAgents: 0,
       }),
     });
   });
-
   await page.route('**/api/tasks/recent?limit=30', async (route) => {
     await route.fulfill({ contentType: 'application/json', body: '[]' });
   });
-
-  await page.addInitScript(() => {
-    class MockEventSource {
-      onmessage: ((event: MessageEvent<string>) => void) | null = null;
-      onerror: ((event: Event) => void) | null = null;
-      constructor() {}
-      close() {}
-    }
-
-    window.EventSource = MockEventSource as unknown as typeof EventSource;
-  });
+  await installMockEventSource(page);
 
   await page.goto('/');
-  await page.getByPlaceholder('Search by name, skill, tag...').fill('writer');
+  await page.getByPlaceholder('Search by name, skill, tag, or tenant').fill('writer');
 
-  await expect(page.getByText('Writer Agent')).toBeVisible();
-  await expect(page.getByText('Researcher Agent')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Writer Agent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Researcher Agent' })).toHaveCount(0);
 });

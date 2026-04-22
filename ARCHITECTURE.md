@@ -1,6 +1,6 @@
 # a2a-mesh Architecture
 
-This document describes the high-level architecture of `a2a-mesh` as of April 2026. The system has evolved from a basic protocol implementation into a secure, observable, multi-tenant agent platform capable of acting as both a Model Context Protocol (MCP) tool and an A2A agent network.
+This document describes the high-level architecture of `a2a-mesh` as of April 2026. The system has evolved from a basic protocol implementation into a security-hardened, observable agent runtime with registry/control-plane components, MCP bridge surfaces, and multi-tenant access controls when authentication is configured.
 
 ## System Topology
 
@@ -22,7 +22,7 @@ The monorepo is divided into the following public package surfaces:
 
 The foundation of the runtime.
 
-- **Server:** Implements the `A2AServer` class (Express-based), handling HTTP, JSON-RPC, and Server-Sent Events (SSE) streaming endpoints. It handles tenant isolation, authentication, and OpenTelemetry instrumentation.
+- **Server:** Implements the `A2AServer` class (Express-based), handling HTTP, JSON-RPC, and Server-Sent Events (SSE) streaming endpoints. It normalizes authentication into a typed request context, enforces tenant-aware task access when auth is configured, and emits OpenTelemetry spans against the active provider.
 - **Client:** The `A2AClient` allows agents to invoke each other with robust networking via `fetchWithPolicy` (idempotent retries, jitter, backoff).
 - **Streaming:** Manages SSE connections with heartbeat keepalives.
 
@@ -50,12 +50,12 @@ The integration layer for the Model Context Protocol.
 
 ## Security Model
 
-- **SSRF Protection:** All outbound registry health checks and webhooks are passed through `validateSafeUrl`, strictly blocking RFC1918 private IP ranges, loopback addresses, and metadata APIs.
-- **Tenant Isolation:** A strict `principalId` and `tenantId` model governs task access. Cross-tenant access is blocked with HTTP 403 Forbidden responses.
+- **SSRF Protection:** All outbound registry health checks and webhooks are passed through `validateSafeUrl`, blocking RFC1918 private IP ranges, loopback addresses unless explicitly allowed, link-local/metadata addresses, and unresolved hostnames by default.
+- **Tenant Isolation:** Authenticated requests are normalized into `principalId` and `tenantId` context. Tasks and registry entries created under a tenant are hidden from other tenants unless explicitly public or legacy/global.
 
 ## Observability
 
-- **OpenTelemetry:** Every request is wrapped in an OpenTelemetry span (`a2aMeshTracer`), providing end-to-end trace correlation across agent hops.
+- **OpenTelemetry:** RPC handling, task processing, outbound HTTP, and SSE delivery use the shared `a2aMeshTracer`. Applications still own provider/exporter bootstrap and inbound trace propagation policy.
 - **Audit Logs:** A dedicated `logger.audit()` channel outputs SIEM-ready structured JSON for security and operational monitoring.
 
 ## Background Jobs & Real-Time

@@ -10,7 +10,7 @@ You still need an HTTP server with JSON-RPC routing, SSE streaming, task lifecyc
 auth middleware, push notifications, telemetry, and registry discovery before you can write a
 single line of useful agent logic.
 
-**`a2a-mesh` is that infrastructure.** It implements A2A Protocol v1.0 in a production-grade
+**`a2a-mesh` is that infrastructure.** It implements A2A Protocol v1.0 in a security-hardened
 TypeScript runtime, then layers adapters, discovery, testing, and control-plane tooling on top so
 you can ship interoperable agents in minutes instead of weeks.
 
@@ -25,4 +25,4 @@ you can ship interoperable agents in minutes instead of weeks.
 - Protocol-correct agent cards, JSON-RPC handling, and SSE task streaming
 - Registry-driven discovery and capability matching across multiple agents
 - Adapter surfaces for OpenAI, Anthropic, LangChain, Google ADK, CrewAI, and LlamaIndex
-- Built-in security and operations primitives such as rate limiting, SSRF protection, retries, and tracing
+- Built-in security and operations primitives such as verified auth, tenant-aware task access, SSRF protection, origin policy, retries, and tracing hooks

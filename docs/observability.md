@@ -1,10 +1,12 @@
 # Observability
 
-`a2a-mesh` emits useful operational signals out of the box:
+`a2a-mesh` exposes useful operational signals with a lightweight default surface:
 
-- OpenTelemetry spans around JSON-RPC handling, task execution, and SSE delivery
+- OpenTelemetry span hooks around JSON-RPC handling, task execution, outbound HTTP, and SSE delivery
 - Health endpoint metrics for uptime, task counts, and memory usage
 - Registry-side health and storage metrics
+
+Applications still own the OTel provider/exporter bootstrap, log shipping, alert rules, and production dashboards.
 
 ## OpenTelemetry example
 

@@ -42,6 +42,7 @@ export interface PushNotificationConfig {
   url: string;
   token?: string;
   authentication?: AuthScheme;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Artifact {
@@ -75,6 +76,9 @@ export interface TaskStatus {
   timestamp: string;
   message?: string;
 }
+
+export type TaskState = TaskStatus['state'];
+export type TerminalTaskState = 'completed' | 'failed' | 'canceled';
 
 export interface Task {
   kind?: 'task';
