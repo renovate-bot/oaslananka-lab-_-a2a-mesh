@@ -1,10 +1,24 @@
-name: CI (Manual)
+name: CI (Org Auto / Manual)
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     strategy:
