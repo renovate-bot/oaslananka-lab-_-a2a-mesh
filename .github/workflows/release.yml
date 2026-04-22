@@ -1,0 +1,105 @@
+name: Release Publish (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and pack artifacts without publishing'
+        required: true
+        type: boolean
+        default: true
+      publish:
+        description: 'Publish npm packages'
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: 'Type PUBLISH to allow npm publishing'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: npm-production
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_PROJECT: ${{ secrets.DOPPLER_PROJECT }}
+      DOPPLER_CONFIG: ${{ secrets.DOPPLER_CONFIG }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install docs-site dependencies
+        run: npm ci --prefix docs-site
+
+      - name: Install Doppler CLI
+        run: bash scripts/ci/install-doppler-cli.sh
+
+      - name: Guard publish confirmation
+        if: ${{ inputs.publish && inputs.confirm != 'PUBLISH' }}
+        run: |
+          echo "Publishing requires confirm=PUBLISH."
+          exit 1
+
+      - name: Verify Doppler release secrets
+        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
+        run: bash scripts/ci/doppler-required.sh NPM_TOKEN
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build packages
+        run: npm run build:packages
+
+      - name: Build docs site
+        run: npm run docs:build
+
+      - name: Unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Check bundle sizes
+        run: node scripts/check-bundle-sizes.mjs
+
+      - name: Pack release artifacts
+        if: ${{ inputs.dry_run || !inputs.publish }}
+        run: |
+          mkdir -p .artifacts/npm
+          npm pack --pack-destination .artifacts/npm --workspace packages/core --workspace packages/adapters --workspace packages/registry --workspace cli --workspace packages/create-a2a-agent
+
+      - name: Apply changeset versions
+        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
+        run: |
+          npx changeset version
+          git config user.email "ci-bot@a2a-mesh.local"
+          git config user.name "a2a-mesh CI"
+          git add -A
+          git commit -m "chore: version packages [skip ci]" || echo "No changes to commit"
+
+      - name: Publish packages to npm with Doppler secrets
+        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
+        run: bash scripts/ci/npm-publish-with-doppler.sh

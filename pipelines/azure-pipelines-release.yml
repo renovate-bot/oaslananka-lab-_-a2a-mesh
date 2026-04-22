@@ -16,6 +16,10 @@ variables:
     value: ${{ parameters.dryRun }}
   - name: PUBLISH_APPROVED
     value: ${{ parameters.publishApproved }}
+  - name: DOPPLER_PROJECT
+    value: all
+  - name: DOPPLER_CONFIG
+    value: main
 
 stages:
   - stage: ValidateRelease
@@ -114,9 +118,16 @@ stages:
                 - script: npm ci
                   displayName: 'Install dependencies'
 
+                - script: bash scripts/ci/install-doppler-cli.sh
+                  displayName: 'Install Doppler CLI'
+
                 - script: |
-                    test -n "$(NPM_TOKEN)" || (echo "NPM_TOKEN secret is required for release publish." && exit 1)
-                  displayName: 'Verify npm token'
+                    bash scripts/ci/doppler-required.sh NPM_TOKEN
+                  displayName: 'Verify Doppler release secrets'
+                  env:
+                    DOPPLER_TOKEN: $(DOPPLER_TOKEN)
+                    DOPPLER_PROJECT: $(DOPPLER_PROJECT)
+                    DOPPLER_CONFIG: $(DOPPLER_CONFIG)
 
                 - script: |
                     echo "Environment approval granted. Proceeding with npm publish."
@@ -137,8 +148,9 @@ stages:
                   displayName: 'Apply changeset versions'
 
                 - script: |
-                    echo "//registry.npmjs.org/:_authToken=$(NPM_TOKEN)" > ~/.npmrc
-                    for workspace in packages/core packages/adapters packages/registry cli packages/create-a2a-agent; do
-                      npm publish --provenance --access public --workspace "$workspace"
-                    done
+                    bash scripts/ci/npm-publish-with-doppler.sh
                   displayName: 'Publish packages to npm'
+                  env:
+                    DOPPLER_TOKEN: $(DOPPLER_TOKEN)
+                    DOPPLER_PROJECT: $(DOPPLER_PROJECT)
+                    DOPPLER_CONFIG: $(DOPPLER_CONFIG)

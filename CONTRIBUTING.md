@@ -49,6 +49,9 @@ npm run release:stable
 
 Use `npm run release:all` only when you intentionally want to publish additional
 public workspaces beyond the stable package set.
+CI release jobs use Doppler for publishing secrets. The CI platform should only
+receive `DOPPLER_TOKEN`, `DOPPLER_PROJECT`, and `DOPPLER_CONFIG`; `NPM_TOKEN`
+is read from Doppler at runtime.
 You do not need CI/CD access to contribute — local test pass is sufficient.
 
 ## AI-assisted contributions

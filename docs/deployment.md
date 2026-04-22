@@ -30,7 +30,20 @@ Recommended split:
 
 ## Release workflow
 
-This repository does not rely on GitHub Actions for deployment.
+CI/CD automation runs from the GitHub organization mirror, while Azure DevOps,
+GitLab, and the personal GitHub repository remain manual fallback targets.
+Release jobs pull publish credentials from Doppler at runtime instead of storing
+the final publishing tokens in each CI platform.
+
+Required bootstrap variables for manual release jobs:
+
+- `DOPPLER_TOKEN`
+- `DOPPLER_PROJECT`
+- `DOPPLER_CONFIG`
+
+Required Doppler secret for npm publishing:
+
+- `NPM_TOKEN`
 
 ### Package release
 
@@ -42,6 +55,11 @@ npm run build
 npm run test
 npm run release
 ```
+
+In CI, use the manual `Release Publish` GitHub workflow, the Azure release
+pipeline, or the GitLab `publish_npm` job. Those jobs install the Doppler CLI,
+verify required secrets without printing their values, and publish with
+`scripts/ci/npm-publish-with-doppler.sh`.
 
 ### Docs deployment
 

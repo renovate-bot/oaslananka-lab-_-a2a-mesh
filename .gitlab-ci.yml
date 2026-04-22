@@ -17,6 +17,8 @@ variables:
   NPM_CONFIG_CACHE: '$CI_PROJECT_DIR/.npm'
   A2A_NODE_IMAGE: 'node:20-bookworm'
   A2A_HELM_IMAGE: 'alpine/helm:3.16.4'
+  DOPPLER_PROJECT: 'all'
+  DOPPLER_CONFIG: 'main'
 
 cache:
   key:
@@ -35,6 +37,7 @@ cache:
     - node --version
     - npm --version
     - npm ci
+    - npm ci --prefix docs-site --prefer-offline
   <<: *manual_job_rules
 
 .helm_job: &helm_job
@@ -90,6 +93,25 @@ package_workspace:
     expire_in: 7 days
     paths:
       - .artifacts/npm/
+
+doppler_probe:
+  <<: *node_job
+  stage: verify
+  script:
+    - bash scripts/ci/install-doppler-cli.sh
+    - bash scripts/ci/doppler-required.sh NPM_TOKEN
+
+publish_npm:
+  <<: *node_job
+  stage: package
+  script:
+    - bash scripts/ci/install-doppler-cli.sh
+    - npm run lint
+    - npm run typecheck
+    - npm run build
+    - npm run test:coverage
+    - npm run test:integration
+    - bash scripts/ci/npm-publish-with-doppler.sh
 
 helm_bundle:
   <<: *helm_job
