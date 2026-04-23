@@ -12,8 +12,8 @@ steps:
     fetchDepth: 0
 
   - script: |
-      bash scripts/setup-node.sh '22.22.2' '11.13.0'
-    displayName: 'Setup Node.js 22.22.2 + npm 11.13.0'
+      bash scripts/setup-node.sh '22.22.2' '10.9.8'
+    displayName: 'Setup Node.js 22.22.2 + npm 10.9.8'
 
   - script: npm ci
     displayName: 'Install dependencies'

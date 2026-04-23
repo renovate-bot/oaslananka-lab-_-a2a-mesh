@@ -4,7 +4,7 @@ Thanks for helping improve `a2a-mesh`.
 
 ## Local workflow
 
-1. Use Node `22.22.2` and npm `11.13.0` by default (`.node-version`, `.nvmrc`, and `packageManager` are the source of truth).
+1. Use Node `22.22.2` and npm `10.9.8` by default (`.node-version`, `.nvmrc`, and `packageManager` are the source of truth).
 2. Install dependencies with `npm ci`.
 3. Run `npm run check:pre-push` while iterating.
 4. Run `npm run ui:install:browsers` once per machine before the full UI smoke path.

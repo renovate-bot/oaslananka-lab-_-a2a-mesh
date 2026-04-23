@@ -15,8 +15,8 @@ jobs:
         fetchDepth: 0
 
       - script: |
-          bash scripts/setup-node.sh '${{ parameters.nodeVersion }}' '11.13.0'
-        displayName: 'Setup Node.js ${{ parameters.nodeVersion }} + npm 11.13.0'
+          bash scripts/setup-node.sh '${{ parameters.nodeVersion }}' '10.9.8'
+        displayName: 'Setup Node.js ${{ parameters.nodeVersion }} + npm 10.9.8'
 
       - task: Cache@2
         displayName: 'Cache npm packages'
