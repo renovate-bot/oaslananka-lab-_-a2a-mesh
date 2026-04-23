@@ -4,12 +4,11 @@ Thanks for helping improve `a2a-mesh`.
 
 ## Local workflow
 
-1. Install dependencies with `npm install`.
-2. Run `npm run lint`.
-3. Run `npm run typecheck`.
-4. Run `npm run build`.
-5. Run `npm run test -- --coverage`.
-6. Verify the CLI and docs changes relevant to your work.
+1. Use Node `22.22.2` and npm `11.13.0` by default (`.node-version`, `.nvmrc`, and `packageManager` are the source of truth).
+2. Install dependencies with `npm ci`.
+3. Run `npm run check:pre-push` while iterating.
+4. Run `npm run ui:install:browsers` once per machine before the full UI smoke path.
+5. Run `npm run check` before opening a PR or cutting a release candidate.
 
 ## Pull requests
 
@@ -21,15 +20,17 @@ Thanks for helping improve `a2a-mesh`.
 
 ## CI and releases
 
-Tests run locally via `npm run test` and `npm run typecheck`.
+Local git hooks are intentionally tiered:
+
+- `pre-commit`: staged formatting + staged lint only
+- `pre-push`: `npm run check:pre-push`
+
 To verify your change before submitting a PR, run the full check suite:
 
 ```bash
-npm install
-npm run lint
-npm run typecheck
-npm run build
-npm run test -- --coverage
+npm ci
+npm run ui:install:browsers
+npm run check
 ```
 
 Releases are cut by the maintainer using [Changesets](https://github.com/changesets/changesets).

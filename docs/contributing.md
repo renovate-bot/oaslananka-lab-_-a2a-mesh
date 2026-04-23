@@ -11,11 +11,15 @@
 Every contribution should pass:
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
-npm run test -- --coverage
+npm ci
+npm run ui:install:browsers
+npm run check
 ```
+
+Git hooks are intentionally layered:
+
+- `pre-commit`: only staged formatting and staged linting
+- `pre-push`: `npm run check:pre-push`
 
 ## Tests
 

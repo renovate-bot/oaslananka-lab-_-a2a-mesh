@@ -8,4 +8,4 @@ pr: none
 jobs:
   - template: pipelines/templates/ci-job.yml
     parameters:
-      nodeVersion: '20.20.2'
+      nodeVersion: '22.22.2'

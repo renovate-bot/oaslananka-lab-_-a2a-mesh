@@ -2,7 +2,7 @@
   "name": "a2a-mesh-workspace",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "npm@10.9.8",
+  "packageManager": "npm@11.13.0",
   "description": "Security-hardened TypeScript runtime for Google's Agent2Agent (A2A) Protocol: server, client SDK, multi-framework adapters, registry and CLI.",
   "keywords": [
     "a2a",
@@ -30,12 +30,15 @@
     "cli"
   ],
   "engines": {
-    "node": ">=20",
-    "npm": ">=10 <11"
+    "node": "^20.19.0 || ^22.13.0 || ^24.0.0",
+    "npm": ">=11 <12"
   },
   "scripts": {
     "build": "npm run build:packages",
     "build:packages": "npm --workspaces run build --if-present",
+    "check": "npm run lint && npm run format:check && npm run lint:md && npm run typecheck && npm run docs:build && npm run test:coverage && npm run test:integration && npm run check:bundle && npm run ui:test:e2e",
+    "check:bundle": "node scripts/check-bundle-sizes.mjs",
+    "check:pre-push": "npm run lint && npm run format:check && npm run lint:md && npm run typecheck && npm run test:coverage",
     "pack:stable": "npm pack --workspace packages/core --workspace packages/adapters --workspace packages/registry --workspace cli --workspace packages/create-a2a-agent",
     "publish:stable": "npm publish --access public --workspace packages/core && npm publish --access public --workspace packages/adapters && npm publish --access public --workspace packages/registry && npm publish --access public --workspace cli && npm publish --access public --workspace packages/create-a2a-agent",
     "test": "npm run build:packages && vitest run",
@@ -57,6 +60,8 @@
     "docs:build": "npm --prefix docs-site run build",
     "docs:preview": "npm --prefix docs-site run preview",
     "docs:api": "typedoc",
+    "ui:install:browsers": "npx --prefix apps/registry-ui playwright install --with-deps chromium",
+    "ui:test:e2e": "npm --prefix apps/registry-ui run test:e2e",
     "release": "npm run release:stable",
     "release:all": "changeset publish",
     "release:stable": "npm run publish:stable",
@@ -81,31 +86,31 @@
     "smol-toml": "1.6.1"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.30.0",
+    "@changesets/cli": "^2.31.0",
     "@eslint/js": "^10.0.1",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.5.2",
+    "@types/node": "^20.19.39",
     "@types/supertest": "^7.2.0",
-    "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/coverage-v8": "^4.1.5",
     "better-sqlite3": "^11.10.0",
-    "eslint": "^10.2.0",
+    "eslint": "^10.2.1",
     "extract-changelog-release": "^1.0.2",
-    "globals": "^17.4.0",
+    "globals": "^17.5.0",
     "husky": "^9.1.7",
     "langsmith": "0.5.21",
     "lint-staged": "^16.4.0",
-    "markdownlint-cli2": "^0.22.0",
-    "prettier": "^3.8.1",
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.8.3",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typedoc": "^0.28.18",
+    "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.0",
+    "typescript-eslint": "^8.59.0",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.5"
   }
 }

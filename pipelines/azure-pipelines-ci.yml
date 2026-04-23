@@ -7,4 +7,4 @@ pr: none
 jobs:
   - template: templates/ci-job.yml
     parameters:
-      nodeVersion: '20.20.2'
+      nodeVersion: '22.22.2'

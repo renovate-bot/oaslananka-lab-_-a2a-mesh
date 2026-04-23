@@ -42,8 +42,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.20.2
+          node-version: 22.22.2
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            docs-site/package-lock.json
+
+      - name: Pin npm 11.13.0
+        run: npm install --global npm@11.13.0
 
       - name: Install dependencies
         run: npm ci
@@ -53,6 +59,9 @@ jobs:
 
       - name: Install Doppler CLI
         run: bash scripts/ci/install-doppler-cli.sh
+
+      - name: Install Playwright browsers
+        run: npm run ui:install:browsers
 
       - name: Guard publish confirmation
         if: ${{ inputs.publish && inputs.confirm != 'PUBLISH' }}
@@ -64,26 +73,8 @@ jobs:
         if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
         run: bash scripts/ci/doppler-required.sh NPM_TOKEN
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Build packages
-        run: npm run build:packages
-
-      - name: Build docs site
-        run: npm run docs:build
-
-      - name: Unit tests with coverage
-        run: npm run test:coverage
-
-      - name: Integration tests
-        run: npm run test:integration
-
-      - name: Check bundle sizes
-        run: node scripts/check-bundle-sizes.mjs
+      - name: Run release check
+        run: npm run check
 
       - name: Pack release artifacts
         if: ${{ inputs.dry_run || !inputs.publish }}

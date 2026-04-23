@@ -8,3 +8,5 @@ deployments/helm/**/templates/*.yaml
 docs-site/.vitepress/cache/
 docs-site/.vitepress/dist/
 docs-site/.vitepress/.temp/
+apps/registry-ui/playwright-report/
+apps/registry-ui/test-results/

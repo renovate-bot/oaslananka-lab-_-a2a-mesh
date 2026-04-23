@@ -12,8 +12,8 @@ steps:
     fetchDepth: 0
 
   - script: |
-      bash scripts/setup-node.sh '20.20.2' '10.9.8'
-    displayName: 'Setup Node.js 20.20.2 + npm 10.9.8'
+      bash scripts/setup-node.sh '22.22.2' '11.13.0'
+    displayName: 'Setup Node.js 22.22.2 + npm 11.13.0'
 
   - script: npm ci
     displayName: 'Install dependencies'
@@ -21,29 +21,14 @@ steps:
   - script: npm ci --prefix docs-site --prefer-offline
     displayName: 'Install docs-site dependencies'
 
-  - script: npm run lint
-    displayName: 'Lint check'
-
-  - script: npm run format:check
-    displayName: 'Prettier format check'
-
-  - script: npm run lint:md
-    displayName: 'Markdown lint'
-
   - script: npx lychee --config .lychee.toml docs-site --offline || true
     displayName: 'Link check (non-blocking)'
 
-  - script: npm run typecheck
-    displayName: 'Type check'
+  - script: npm run ui:install:browsers
+    displayName: 'Install Playwright browsers'
 
-  - script: npm run build
-    displayName: 'Build'
-
-  - script: npm run docs:build
-    displayName: 'Build docs site'
-
-  - script: npm run test
-    displayName: 'Tests'
+  - script: npm run check
+    displayName: 'Run repository check'
 
   - script: |
       for pkg in packages/core packages/client packages/adapters packages/registry packages/testing packages/ws packages/grpc cli; do

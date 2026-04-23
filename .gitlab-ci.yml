@@ -15,7 +15,7 @@ default:
 variables:
   NODE_ENV: development
   NPM_CONFIG_CACHE: '$CI_PROJECT_DIR/.npm'
-  A2A_NODE_IMAGE: 'node:20-bookworm'
+  A2A_NODE_IMAGE: 'node:22-bookworm'
   A2A_HELM_IMAGE: 'alpine/helm:3.16.4'
   DOPPLER_PROJECT: 'all'
   DOPPLER_CONFIG: 'main'
@@ -34,6 +34,7 @@ cache:
 .node_job: &node_job
   image: $A2A_NODE_IMAGE
   before_script:
+    - bash scripts/setup-node.sh '22.22.2' '11.13.0'
     - node --version
     - npm --version
     - npm ci
@@ -61,11 +62,8 @@ quality_gate:
   <<: *node_job
   stage: verify
   script:
-    - npm run lint
-    - npm run typecheck
-    - npm run build
-    - npm run test:coverage
-    - npm run test:integration
+    - npm run ui:install:browsers
+    - npm run check
   artifacts:
     when: always
     expire_in: 7 days
@@ -106,11 +104,8 @@ publish_npm:
   stage: package
   script:
     - bash scripts/ci/install-doppler-cli.sh
-    - npm run lint
-    - npm run typecheck
-    - npm run build
-    - npm run test:coverage
-    - npm run test:integration
+    - npm run ui:install:browsers
+    - npm run check
     - bash scripts/ci/npm-publish-with-doppler.sh
 
 helm_bundle:
