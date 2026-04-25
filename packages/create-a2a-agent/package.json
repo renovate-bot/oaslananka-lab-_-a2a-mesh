@@ -1,6 +1,6 @@
 {
   "name": "create-a2a-mesh",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Bootstrap a new A2A agent project with a2a-mesh templates and adapter presets",
   "keywords": [
     "a2a",
@@ -47,6 +47,6 @@
     "build": "unbuild --config build.config.ts"
   },
   "dependencies": {
-    "a2a-mesh-cli": "^1.1.0"
+    "a2a-mesh-cli": "^1.2.0"
   }
 }

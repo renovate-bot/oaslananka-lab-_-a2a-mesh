@@ -6,14 +6,37 @@ The repository uses Changesets for versioning and release notes generation.
 
 ## Unreleased
 
+No unreleased changes.
+
+## 1.2.0 - 2026-04-26
+
+### Security
+
+- Enforce verify-first bearer authentication and typed request context propagation.
+- Harden SSRF validation, CORS/origin checks, SSE access, and registry control-plane authentication paths.
+- Patch transient dependency advisories with deterministic overrides, including PostCSS, Hono, protobufjs, and uuid.
+
+### Added
+
+- Explicit task FSM semantics, idempotency/replay protection, and runtime metrics.
+- Telemetry bootstrap helpers with correlation fields aligned across runtime, registry, logs, metrics, and dashboards.
+- Registry indexing, filtering, polling, and storage coverage for larger mesh scenarios.
+- Operator-focused registry UI flows, task stream handling, auth-aware states, and e2e smoke coverage.
+- Local quality gates, pre-commit/pre-push hooks, org-routed GitHub Actions, manual Azure/GitLab fallback, and release dry-run workflow support.
+
+### Changed
+
+- Stable packages are versioned as `1.2.0`: `a2a-mesh`, `a2a-mesh-adapters`, `a2a-mesh-registry`, `a2a-mesh-cli`, and `create-a2a-mesh`.
+- GitHub Actions were moved to current stable Node 24 action runtimes.
+- npm is pinned to `10.9.8` for deterministic local and CI installs.
+- Release documentation and public claims now match the implemented security, observability, UI, and CI behavior.
+
 ### Fixed
 
 - Remove duplicate `module` fields from published package manifests before release packaging.
 - Correct the roadmap and architecture docs to reflect already-shipped features and real npm package names.
 - Replace internal-only CI wording with contributor-friendly local verification and Changesets guidance.
 - Add a non-breaking `/rpc` JSON-RPC alias and validate push notification URLs against SSRF rules.
-
-### Added
 
 - `a2a-mesh-mcp-bridge` README and publish metadata for the upcoming npm release wave.
 - WebSocket integration coverage via `packages/ws/tests/ws.test.ts`.

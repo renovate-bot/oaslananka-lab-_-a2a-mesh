@@ -39,7 +39,7 @@
     "ws": "^8.18.3"
   },
   "dependencies": {
-    "a2a-mesh": "^1.1.0"
+    "a2a-mesh": "^1.2.0"
   },
   "exports": {
     ".": {

@@ -1,6 +1,6 @@
 {
   "name": "a2a-mesh-adapters",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-framework adapters for OpenAI, Anthropic, LangChain, Google ADK, CrewAI and LlamaIndex",
   "keywords": [
     "a2a",
@@ -33,7 +33,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.1.0"
+    "a2a-mesh": "^1.2.0"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

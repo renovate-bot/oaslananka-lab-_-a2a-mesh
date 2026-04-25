@@ -1,6 +1,6 @@
 {
   "name": "a2a-mesh-cli",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "CLI for validating, discovering, benchmarking and operating A2A agents",
   "keywords": [
     "a2a",
@@ -33,8 +33,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.1.0",
-    "a2a-mesh-registry": "^1.1.0",
+    "a2a-mesh": "^1.2.0",
+    "a2a-mesh-registry": "^1.2.0",
     "commander": "^11.1.0",
     "chalk": "^4.1.2",
     "ora": "^5.4.1"

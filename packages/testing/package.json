@@ -31,7 +31,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.1.0"
+    "a2a-mesh": "^1.2.0"
   },
   "devDependencies": {
     "typescript": "^5.2.2"

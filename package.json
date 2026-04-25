@@ -82,6 +82,7 @@
     "esbuild": "0.25.12",
     "hono": "4.12.14",
     "langsmith": "0.5.21",
+    "postcss": "8.5.10",
     "protobufjs": "7.5.5",
     "smol-toml": "1.6.1",
     "uuid": "14.0.0"

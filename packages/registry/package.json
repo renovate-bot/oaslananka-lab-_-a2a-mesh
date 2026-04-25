@@ -1,6 +1,6 @@
 {
   "name": "a2a-mesh-registry",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Agent registry, discovery API, SSE updates and storage backends for A2A runtimes",
   "keywords": [
     "a2a",
@@ -30,7 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.1.0",
+    "a2a-mesh": "^1.2.0",
     "express": "^4.18.2",
     "cors": "^2.8.5"
   },
