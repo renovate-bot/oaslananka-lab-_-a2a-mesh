@@ -8,7 +8,7 @@ export default defineBuildConfig({
   rollup: {
     emitCJS: true,
     esbuild: {
-      target: 'node20',
+      target: 'node22',
     },
   },
 });
