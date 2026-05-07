@@ -4,7 +4,7 @@ This guide takes you from a fresh project to a running multi-agent workflow with
 
 ## 1. Install the CLI
 
-Ensure you have Node.js 20+ installed.
+Ensure you have Node.js 22.13+ installed.
 
 ```bash
 npx create-a2a-mesh my-research-team

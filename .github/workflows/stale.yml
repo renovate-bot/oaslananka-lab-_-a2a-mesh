@@ -1,0 +1,74 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    name: Stale issues/PRs
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const staleAfterDays = 60;
+            const closeAfterDays = 14;
+            const staleLabel = 'status:stale';
+            const exemptLabels = new Set(['priority:p0', 'pinned', 'security', 'type:security']);
+            const now = Date.now();
+            const staleMs = staleAfterDays * 86400000;
+            const closeMs = closeAfterDays * 86400000;
+            const { owner, repo } = context.repo;
+            const items = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const item of items) {
+              const labels = item.labels.map((label) => label.name);
+              if (labels.some((label) => exemptLabels.has(label))) {
+                continue;
+              }
+
+              const age = now - new Date(item.updated_at).getTime();
+              if (labels.includes(staleLabel)) {
+                if (age > closeMs) {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: item.number,
+                    body: 'Closing due to inactivity.',
+                  });
+                  await github.rest.issues.update({
+                    owner,
+                    repo,
+                    issue_number: item.number,
+                    state: 'closed',
+                  });
+                }
+              } else if (age > staleMs) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: item.number,
+                  labels: [staleLabel],
+                });
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: item.number,
+                  body: `Inactive for ${staleAfterDays} days. Closes in ${closeAfterDays} days without activity.`,
+                });
+              }
+            }

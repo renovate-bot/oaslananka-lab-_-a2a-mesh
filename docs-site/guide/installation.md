@@ -20,6 +20,6 @@ npm install a2a-mesh-registry a2a-mesh-cli
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22.13 or newer
 - TypeScript 5.x for the best DX
 - optional provider SDKs such as `openai`, `@anthropic-ai/sdk`, or `langchain`

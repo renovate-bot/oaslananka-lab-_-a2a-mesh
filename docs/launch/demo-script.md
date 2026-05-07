@@ -4,7 +4,7 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 
 ## Pre-requisites
 
-1. Node.js 20+ installed.
+1. Node.js 22.13+ installed.
 2. An OpenAI API Key (\`OPENAI_API_KEY\`).
 3. Local ports \`3001\`, \`3002\`, \`3003\`, \`3099\`, and \`5173\` are open.
 

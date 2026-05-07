@@ -2,11 +2,10 @@ name: CI (Org Auto / Manual)
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -18,17 +17,23 @@ concurrency:
 
 jobs:
   build-and-test:
-    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.repository == 'oaslananka-lab/a2a-mesh' ||
+       github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        node-version: [20.20.2, 22.22.2, 24.14.1]
+        node-version: [22.22.2, 24.14.1]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -53,3 +58,17 @@ jobs:
 
       - name: Run CI check
         run: npm run check
+
+      - name: Upload coverage to Codecov
+        if: >-
+          matrix.node-version == '22.22.2' &&
+          github.actor != 'dependabot[bot]' &&
+          (
+            github.event_name != 'pull_request' ||
+            github.event.pull_request.head.repo.full_name == github.repository
+          )
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
+        continue-on-error: true
+        with:
+          files: ./coverage/lcov.info
+          flags: unit

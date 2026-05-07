@@ -1,0 +1,49 @@
+name: Review Thread Gate
+
+on:
+  pull_request_review:
+  pull_request_review_comment:
+  pull_request:
+    types: [synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  thread-gate:
+    name: Review Thread Gate
+    if: >-
+      github.repository == 'oaslananka-lab/a2a-mesh' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check unresolved review threads
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request?.number;
+            if (!prNumber) {
+              core.info('No pull request found, skipping.');
+              return;
+            }
+
+            const query = `
+              query($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $pr) {
+                    reviewThreads(first: 100) { nodes { isResolved } }
+                  }
+                }
+              }`;
+            const result = await github.graphql(query, { owner, repo, pr: prNumber });
+            const threads = result.repository.pullRequest.reviewThreads.nodes;
+            const unresolved = threads.filter((thread) => !thread.isResolved);
+            if (unresolved.length > 0) {
+              core.setFailed(`${unresolved.length} unresolved thread(s). Resolve all before merging.`);
+            } else {
+              core.info(`All ${threads.length} review threads resolved.`);
+            }

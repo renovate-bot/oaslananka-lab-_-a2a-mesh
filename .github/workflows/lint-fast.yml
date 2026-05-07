@@ -1,0 +1,58 @@
+name: Lint (fast)
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    name: Workflow lint
+    if: >-
+      github.repository == 'oaslananka-lab/a2a-mesh' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: actionlint
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8
+        with:
+          fail-on-error: true
+      - name: yamllint
+        run: |
+          pip install yamllint --break-system-packages 2>/dev/null || pip install yamllint
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/
+
+  node-fast:
+    name: ESLint + Prettier + Typecheck
+    if: >-
+      github.repository == 'oaslananka-lab/a2a-mesh' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@10.9.8
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run lint:md
+      - run: npm run build:packages
+      - run: npm run typecheck

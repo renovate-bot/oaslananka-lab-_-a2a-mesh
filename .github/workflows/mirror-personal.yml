@@ -1,0 +1,31 @@
+name: Mirror to Personal
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Mirror to oaslananka/a2a-mesh
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push mirror
+        env:
+          MIRROR_TOKEN: ${{ secrets.PERSONAL_MIRROR_TOKEN }}
+        run: |
+          git config user.email "ci-mirror@github.com"
+          git config user.name "CI Mirror Bot"
+          git remote add personal \
+            "https://x-access-token:${MIRROR_TOKEN}@github.com/oaslananka/a2a-mesh.git"
+          git push personal HEAD:main --force

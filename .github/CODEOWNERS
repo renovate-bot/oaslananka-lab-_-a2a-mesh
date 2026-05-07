@@ -1,1 +1,19 @@
-* @oaslananka
+# Repo-wide owner (personal + org)
+* @oaslananka @oaslananka-lab/a2a-mesh-maintainers
+
+# Core packages - stricter review
+/packages/core/             @oaslananka
+/packages/registry/         @oaslananka
+/packages/adapters/         @oaslananka
+
+# Security-sensitive files
+/packages/core/src/auth/    @oaslananka
+/packages/core/src/security/ @oaslananka
+
+# CI/CD workflows
+/.github/workflows/         @oaslananka
+/pipelines/                 @oaslananka
+/azure-pipelines.yml        @oaslananka
+
+# Deployments
+/deployments/               @oaslananka

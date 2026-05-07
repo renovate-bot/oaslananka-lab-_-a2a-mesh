@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", "group:monorepos"],
+  "labels": ["area:deps"],
+  "prHourlyLimit": 5,
+  "prConcurrentLimit": 10,
+  "automerge": true,
+  "automergeType": "pr",
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "matchPackagePatterns": ["*"]
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["area:deps", "type:breaking"]
+    },
+    {
+      "matchPackagePrefixes": ["@a2a-mesh/"],
+      "enabled": false
+    },
+    {
+      "groupName": "vitest monorepo",
+      "matchPackagePrefixes": ["vitest", "@vitest/"]
+    },
+    {
+      "groupName": "hono monorepo",
+      "matchPackageNames": ["hono", "@hono/node-server"]
+    },
+    {
+      "groupName": "opentelemetry",
+      "matchPackagePrefixes": ["@opentelemetry/"]
+    }
+  ],
+  "ignorePaths": ["apps/registry-ui/**", "docs-site/**"]
+}

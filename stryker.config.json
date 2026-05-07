@@ -1,0 +1,20 @@
+{
+  "packageManager": "npm",
+  "reporters": ["html", "clear-text", "progress"],
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "mutate": [
+    "packages/core/src/**/*.ts",
+    "packages/adapters/src/**/*.ts",
+    "packages/registry/src/**/*.ts",
+    "!**/*.test.ts",
+    "!**/index.ts"
+  ],
+  "thresholds": {
+    "high": 70,
+    "low": 50,
+    "break": 0
+  }
+}

@@ -56,6 +56,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      'commitlint.config.cjs',
       'eslint.config.mjs',
       'docs-site/.vitepress/cache/**',
       'docs-site/.vitepress/dist/**',

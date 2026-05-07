@@ -1,0 +1,43 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/src/**'
+      - 'packages/adapters/src/**'
+      - 'packages/registry/src/**'
+
+permissions:
+  contents: read
+
+jobs:
+  stryker:
+    name: Stryker (core + adapters)
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@10.9.8
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Run Stryker
+        run: npx stryker run
+        continue-on-error: true
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 30

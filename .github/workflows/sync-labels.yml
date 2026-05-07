@@ -1,0 +1,92 @@
+name: Sync Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync labels from labels.yml
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: Sync labels from config
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python -m pip install --user pyyaml
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import yaml
+
+          repo = os.environ["REPO"]
+          with open(".github/labels.yml", "r", encoding="utf-8") as fh:
+              labels = yaml.safe_load(fh) or []
+
+          for label in labels:
+              name = label["name"]
+              color = label["color"]
+              description = label.get("description", "")
+              payload = json.dumps({
+                  "new_name": name,
+                  "color": color,
+                  "description": description,
+              })
+              result = subprocess.run(
+                  [
+                      "gh",
+                      "api",
+                      f"repos/{repo}/labels/{name}",
+                      "-X",
+                      "PATCH",
+                      "--input",
+                      "-",
+                      "--silent",
+                  ],
+                  input=payload,
+                  text=True,
+              )
+              if result.returncode == 0:
+                  print(f"updated {name}")
+                  continue
+
+              create_payload = json.dumps({
+                  "name": name,
+                  "color": color,
+                  "description": description,
+              })
+              create = subprocess.run(
+                  [
+                      "gh",
+                      "api",
+                      f"repos/{repo}/labels",
+                      "-X",
+                      "POST",
+                      "--input",
+                      "-",
+                      "--silent",
+                  ],
+                  input=create_payload,
+                  text=True,
+              )
+              if create.returncode != 0:
+                  print(f"failed to sync {name}", file=sys.stderr)
+                  sys.exit(create.returncode)
+              print(f"created {name}")
+          PY

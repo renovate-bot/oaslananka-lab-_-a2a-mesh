@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20 or newer
+- Node.js 22.13 or newer
 - npm workspaces enabled through the repository root
 - An A2A-compatible agent URL for local testing
 

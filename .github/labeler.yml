@@ -1,0 +1,85 @@
+'pkg:core':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/core/**'
+
+'pkg:adapters':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/adapters/**'
+
+'pkg:registry':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/registry/**'
+
+'pkg:ws':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/ws/**'
+
+'pkg:client':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/client/**'
+
+'pkg:cli':
+  - changed-files:
+      - any-glob-to-any-file: 'cli/**'
+
+'pkg:grpc':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/grpc/**'
+
+'pkg:mcp-bridge':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/mcp-bridge/**'
+          - 'packages/codex-bridge/**'
+
+'pkg:testing':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/testing/**'
+
+'area:apps':
+  - changed-files:
+      - any-glob-to-any-file: 'apps/**'
+
+'area:docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - 'docs-site/**'
+          - '*.md'
+
+'area:ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - 'pipelines/**'
+          - 'azure-pipelines.yml'
+          - '.gitlab-ci.yml'
+
+'area:deployments':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'deployments/**'
+          - 'docker-compose.yml'
+          - 'apps/demo/Dockerfile'
+          - 'packages/core/Dockerfile'
+
+'area:security':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'packages/core/src/auth/**'
+          - 'packages/core/src/security/**'
+          - 'packages/core/src/middleware/**'
+
+'area:deps':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package-lock.json'
+          - 'package.json'
+          - '**/package.json'
+
+'area:tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - '**/*.test.ts'
+          - '**/*.spec.ts'

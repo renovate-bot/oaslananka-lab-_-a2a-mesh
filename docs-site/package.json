@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "npm@10.9.8",
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || ^24.0.0",
+    "node": "^22.13.0 || ^24.0.0",
     "npm": ">=10 <11"
   },
   "scripts": {
@@ -18,5 +18,8 @@
     "esbuild": "0.25.12",
     "postcss": "8.5.10",
     "vite": "6.4.2"
+  },
+  "dependencies": {
+    "a2a-mesh-workspace": "file:.."
   }
 }

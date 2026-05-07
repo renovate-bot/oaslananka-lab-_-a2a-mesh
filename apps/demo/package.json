@@ -17,12 +17,12 @@
     "openai": "^4.104.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.17.2",
     "tsx": "^4.21.0",
     "typescript": "^5.2.2"
   },
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.13.0"
   }
 }

@@ -1,0 +1,40 @@
+name: Branch Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete merged branch
+    if: >-
+      github.repository == 'oaslananka-lab/a2a-mesh' &&
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Delete branch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            if (['main', 'develop', 'release'].includes(branch)) {
+              core.info(`Skipping protected branch: ${branch}`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${branch}`,
+              });
+              core.info(`Deleted branch: ${branch}`);
+            } catch (error) {
+              core.warning(`Could not delete branch ${branch}: ${error.message}`);
+            }

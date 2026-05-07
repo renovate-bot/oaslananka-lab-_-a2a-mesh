@@ -5,7 +5,7 @@ local A2A control plane.
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22.13+
 - `OPENAI_API_KEY`
 - Optional `ANTHROPIC_API_KEY` for the writer agent
 

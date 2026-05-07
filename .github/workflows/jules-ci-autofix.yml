@@ -2,11 +2,18 @@ name: Jules CI Auto-Fix
 
 on:
   workflow_run:
+    workflows:
+      - CI (Org Auto / Manual)
+      - CodeQL Security Scan
+      - Deploy Docs to GitHub Pages
+      - Lint (fast)
+      - Release Publish (Manual)
+      - Security
     types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
-        description: "GitHub Actions run_id to repair"
+        description: 'GitHub Actions run_id to repair'
         required: true
         type: string
 
@@ -20,25 +27,23 @@ permissions:
   pull-requests: read
 
 env:
-  MAX_AUTOFIX_ATTEMPTS: "8"        # 0 = unbounded, not recommended
-  ATTEMPT_WINDOW_HOURS: "24"
-  FAILED_LOG_MAX_CHARS: "70000"
+  MAX_AUTOFIX_ATTEMPTS: '8' # 0 = unbounded, not recommended
+  ATTEMPT_WINDOW_HOURS: '24'
+  FAILED_LOG_MAX_CHARS: '70000'
 
 jobs:
   autofix:
     name: Invoke Jules on failed CI/CD
     runs-on: ubuntu-latest
 
-    if: >
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event_name == 'workflow_run' &&
-          contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion) &&
-          github.event.workflow_run.name != github.workflow &&
-          github.event.workflow_run.head_repository.full_name == github.repository
-        )
-      }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion) &&
+        github.event.workflow_run.name != github.workflow &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
 
     steps:
       - name: Build failed-run context
@@ -217,12 +222,50 @@ jobs:
             echo "__JULES_PROMPT__"
           } >> "$GITHUB_OUTPUT"
 
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        if: steps.ctx.outputs.skip != 'true'
+        with:
+          fetch-depth: 30
+          persist-credentials: false
+          ref: ${{ steps.ctx.outputs.head_branch }}
+
       - name: Invoke Jules
         if: steps.ctx.outputs.skip != 'true'
-        uses: google-labs-code/jules-invoke@v1
-        with:
-          jules_api_key: ${{ secrets.JULES_API_KEY }}
-          starting_branch: ${{ steps.ctx.outputs.head_branch }}
-          include_last_commit: true
-          include_commit_log: true
-          prompt: ${{ steps.ctx.outputs.prompt }}
+        env:
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          STARTING_BRANCH: ${{ steps.ctx.outputs.head_branch }}
+          USER_PROMPT: ${{ steps.ctx.outputs.prompt }}
+        run: |
+          {
+            printf '%s\n\n' "$USER_PROMPT"
+            printf 'Content of the latest commit (in the format of `git show`):\n'
+            printf '```\n'
+            git show
+            printf '```\n\n'
+            printf 'Log of the last 20 commits (in the format of `git log --stat`):\n'
+            printf '```\n'
+            git log -20 --stat
+            printf '```\n'
+          } > prompt.txt
+
+          jq -n \
+            --arg jules_prompt "$(cat prompt.txt)" \
+            --arg starting_branch "$STARTING_BRANCH" \
+            --arg repo_full_name "${{ github.repository }}" \
+            '{
+              "prompt": $jules_prompt,
+              "sourceContext": {
+                "source": "sources/github/\($repo_full_name)",
+                "githubRepoContext": {
+                  "startingBranch": $starting_branch
+                }
+              },
+              "requirePlanApproval": false,
+              "automationMode": "AUTO_CREATE_PR"
+            }' > jules_payload.json
+
+          curl 'https://jules.googleapis.com/v1alpha/sessions' \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Goog-Api-Key: ${JULES_API_KEY}" \
+            -d @jules_payload.json

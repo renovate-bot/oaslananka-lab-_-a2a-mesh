@@ -1,0 +1,46 @@
+name: Lock Closed Threads
+
+on:
+  schedule:
+    - cron: '45 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lock:
+    name: Lock closed issues/PRs
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Lock inactive closed issues/PRs
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const inactiveDays = 30;
+            const cutoff = Date.now() - inactiveDays * 86400000;
+            const cutoffDate = new Date(cutoff).toISOString().slice(0, 10);
+            const { owner, repo } = context.repo;
+            const query = `repo:${owner}/${repo} is:closed is:unlocked updated:<${cutoffDate}`;
+            const items = await github.paginate(github.rest.search.issuesAndPullRequests, {
+              q: query,
+              per_page: 100,
+            });
+
+            for (const item of items) {
+              try {
+                await github.rest.issues.lock({
+                  owner,
+                  repo,
+                  issue_number: item.number,
+                  lock_reason: 'resolved',
+                });
+                core.info(`Locked #${item.number}`);
+              } catch (error) {
+                core.warning(`Could not lock #${item.number}: ${error.message}`);
+              }
+            }

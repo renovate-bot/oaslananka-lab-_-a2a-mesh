@@ -21,7 +21,7 @@
     "url": "https://github.com/oaslananka/a2a-mesh/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.13.0"
   },
   "type": "module",
   "sideEffects": false,
