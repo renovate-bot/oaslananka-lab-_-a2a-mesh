@@ -1,15 +1,6 @@
 name: Jules CI Auto-Fix
 
 on:
-  workflow_run:
-    workflows:
-      - CI (Org Auto / Manual)
-      - CodeQL Security Scan
-      - Deploy Docs to GitHub Pages
-      - Lint (fast)
-      - Release Publish (Manual)
-      - Security
-    types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
@@ -18,7 +9,7 @@ on:
         type: string
 
 concurrency:
-  group: jules-ci-autofix-${{ github.event.workflow_run.head_branch || inputs.run_id || github.run_id }}
+  group: jules-ci-autofix-${{ inputs.run_id || github.run_id }}
   cancel-in-progress: false
 
 permissions:
@@ -36,14 +27,7 @@ jobs:
     name: Invoke Jules on failed CI/CD
     runs-on: ubuntu-latest
 
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'workflow_run' &&
-        contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion) &&
-        github.event.workflow_run.name != github.workflow &&
-        github.event.workflow_run.head_repository.full_name == github.repository
-      )
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
 
     steps:
       - name: Build failed-run context
@@ -52,14 +36,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_RUN_ID: ${{ github.event.workflow_run.id || '' }}
           MANUAL_RUN_ID: ${{ inputs.run_id || '' }}
           SELF_WORKFLOW: ${{ github.workflow }}
         run: |
           set -euo pipefail
 
-          RUN_ID="${EVENT_RUN_ID:-$MANUAL_RUN_ID}"
+          RUN_ID="${MANUAL_RUN_ID}"
 
           if [[ -z "${RUN_ID}" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"

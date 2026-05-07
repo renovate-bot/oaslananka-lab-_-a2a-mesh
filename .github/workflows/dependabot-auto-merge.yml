@@ -11,7 +11,8 @@ jobs:
   auto-merge:
     name: Auto-merge patch/minor
     if: >-
-      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.user.id == 49699333 &&
       github.repository == 'oaslananka-lab/a2a-mesh'
     runs-on: ubuntu-latest
     timeout-minutes: 10
