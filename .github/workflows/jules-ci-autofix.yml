@@ -218,14 +218,14 @@ jobs:
         run: |
           {
             printf '%s\n\n' "$USER_PROMPT"
-            printf 'Content of the latest commit (in the format of `git show`):\n'
-            printf '```\n'
+            printf '%s\n' "Content of the latest commit (in the format of \`git show\`):"
+            printf '%s\n' "\`\`\`"
             git show
-            printf '```\n\n'
-            printf 'Log of the last 20 commits (in the format of `git log --stat`):\n'
-            printf '```\n'
+            printf '%s\n\n' "\`\`\`"
+            printf '%s\n' "Log of the last 20 commits (in the format of \`git log --stat\`):"
+            printf '%s\n' "\`\`\`"
             git log -20 --stat
-            printf '```\n'
+            printf '%s\n' "\`\`\`"
           } > prompt.txt
 
           # shellcheck disable=SC2016
