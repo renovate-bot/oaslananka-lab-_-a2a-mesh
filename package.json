@@ -41,7 +41,7 @@
     "check:bundle": "node scripts/check-bundle-sizes.mjs",
     "check:pre-push": "pnpm run lint && pnpm run format:check && pnpm run lint:md && pnpm run typecheck && pnpm run test:coverage",
     "pack:stable": "pnpm run pack:release",
-    "pack:release": "node scripts/pack-release.mjs",
+    "pack:release": "node scripts/prepare-release-artifacts.mjs && pnpm --filter a2a-mesh --filter a2a-mesh-adapters --filter a2a-mesh-registry --filter a2a-mesh-cli --filter create-a2a-mesh --filter a2a-mesh-mcp-bridge --filter a2a-mesh-ws -r pack --pack-destination .artifacts/npm",
     "publish:stable": "pnpm --filter a2a-mesh publish --access public && pnpm --filter a2a-mesh-adapters publish --access public && pnpm --filter a2a-mesh-registry publish --access public && pnpm --filter a2a-mesh-cli publish --access public && pnpm --filter create-a2a-mesh publish --access public && pnpm --filter a2a-mesh-mcp-bridge publish --access public && pnpm --filter a2a-mesh-ws publish --access public",
     "test": "pnpm run build:packages && vitest run",
     "test:unit": "vitest run --project unit --reporter=default --reporter=junit --outputFile.junit=./test-results/junit-unit.xml",
