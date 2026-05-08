@@ -19,7 +19,7 @@ than as a full hosted control plane.
 Start the demo stack first:
 
 ```bash
-npm run demo:local
+pnpm run demo:local
 ```
 
 Then run the UI:
@@ -37,7 +37,7 @@ By default, the dashboard expects the registry at `http://localhost:3099`.
 Use the Registry UI together with:
 
 - the local demo agents
-- `npx a2a registry start` for a standalone registry
+- `pnpm dlx a2a-mesh-cli registry start` for a standalone registry
 - the CLI for validation and task submission
 
 ## Current scope

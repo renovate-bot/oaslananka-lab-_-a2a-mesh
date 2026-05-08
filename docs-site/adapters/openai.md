@@ -5,5 +5,5 @@ Use `OpenAIAdapter` when your task execution is powered by the OpenAI Chat Compl
 Install:
 
 ```bash
-npm install a2a-mesh-adapters openai
+pnpm add a2a-mesh-adapters openai
 ```

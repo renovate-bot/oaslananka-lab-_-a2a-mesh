@@ -5,7 +5,7 @@ Bidirectional bridge between the A2A Protocol and the Model Context Protocol (MC
 ## Install
 
 ```bash
-npm install a2a-mesh-mcp-bridge
+pnpm add a2a-mesh-mcp-bridge
 ```
 
 ## Expose an A2A agent as an MCP tool

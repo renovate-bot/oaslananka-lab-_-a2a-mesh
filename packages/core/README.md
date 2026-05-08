@@ -14,7 +14,7 @@ Core A2A Protocol v1.0 runtime for TypeScript.
 ## Install
 
 ```bash
-npm install a2a-mesh
+pnpm add a2a-mesh
 ```
 
 ## Docs

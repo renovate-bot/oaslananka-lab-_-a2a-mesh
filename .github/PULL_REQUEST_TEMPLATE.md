@@ -12,12 +12,12 @@
 
 ## Checklist
 
-- [ ] `npm run lint` passes
-- [ ] `npm run typecheck` passes
-- [ ] `npm run test -- --coverage` passes with ≥80% coverage
+- [ ] `pnpm run lint` passes
+- [ ] `pnpm run typecheck` passes
+- [ ] `pnpm run test -- --coverage` passes with ≥80% coverage
 - [ ] Added/updated tests for the change
 - [ ] Updated relevant docs or README
-- [ ] Added a changeset (`npx changeset add`) if this changes a package's public API
+- [ ] Used Conventional Commits for public package changes
 
 ## Related Issues
 

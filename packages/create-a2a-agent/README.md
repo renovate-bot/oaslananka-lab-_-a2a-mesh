@@ -5,26 +5,26 @@
 ## Usage
 
 ```bash
-npx create-a2a-mesh my-research-agent
+pnpm dlx create-a2a-mesh my-research-agent
 ```
 
 The wrapper forwards all arguments to:
 
 ```bash
-npx a2a scaffold my-research-agent
+pnpm dlx a2a-mesh-cli scaffold my-research-agent
 ```
 
 ## Supported flags
 
 ```bash
-npx create-a2a-mesh my-agent --adapter openai --auth --rate-limit --docker
+pnpm dlx create-a2a-mesh my-agent --adapter openai --auth --rate-limit --docker
 ```
 
 - `--adapter <custom|openai|anthropic|langchain>`
 - `--auth`
 - `--rate-limit`
 - `--docker`
-- `--package-manager <npm|pnpm|yarn>`
+- `--package-manager <pnpm>`
 
 ## Output
 

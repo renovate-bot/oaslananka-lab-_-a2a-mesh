@@ -10,7 +10,7 @@ The project ships several related packages, demo apps, deployment assets, and do
 
 ## Decision
 
-Keep the project as an npm workspaces monorepo with shared root linting, type checking, release, and CI policy.
+Keep the project as an pnpm workspaces monorepo with shared root linting, type checking, release, and CI policy.
 
 ## Consequences
 

@@ -46,17 +46,17 @@ integration toolkit that makes it practical to build with.
 | **Network resilience**        | Retry, exponential backoff, jitter, timeouts, circuit breaker primitives                                    |
 | **Transport extensions**      | WebSocket transport package today, gRPC transport package in experimental form                              |
 | **Testing toolkit**           | `A2ATestServer`, `MockA2AClient`, fixtures, matchers, integration tests                                     |
-| **Scaffolding CLI**           | `npx create-a2a-mesh` for new agents and multi-agent starter packs                                          |
+| **Scaffolding CLI**           | `pnpm dlx create-a2a-mesh` for new agents and multi-agent starter packs                                     |
 
 ---
 
 ## Try it in 30 seconds
 
 ```bash
-npx create-a2a-mesh demo
+pnpm dlx create-a2a-mesh demo
 cd demo
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Then send a task:
@@ -76,12 +76,12 @@ You will see a task get created, completed, and returned through the A2A runtime
 For a real multi-agent starter pack:
 
 ```bash
-npx create-a2a-mesh my-team --adapter pack-research-team
+pnpm dlx create-a2a-mesh my-team --adapter pack-research-team
 cd my-team
 cp .env.example .env
 # add OPENAI_API_KEY to .env
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 This pack starts a local registry plus multiple agents wired together through A2A. The raw
@@ -90,7 +90,7 @@ registry catalog is available at `http://localhost:3099/agents`.
 ### Or install manually
 
 ```bash
-npm install a2a-mesh
+pnpm add a2a-mesh
 ```
 
 ```ts
@@ -287,22 +287,8 @@ Kubernetes, Cloud Run, Railway, and docs-site publishing without GitHub Actions.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Add a changeset for public package changes and run the
-local verification suite before opening a PR.
-
----
-
-## AI assistance note
-
-`a2a-mesh` is maintainer-directed software. AI tools are used as development assistants, not as
-autonomous authors of the project.
-
-- The social preview image at `.github/og-image.png` was generated with Gemini Nano Bana and then
-  selected for the repository by the maintainer.
-- Codex is used in this repository as a coding assistant for refactors, documentation work, review
-  support, and repetitive implementation tasks.
-- Final architecture, API design, security review, release decisions, and project ownership remain
-  with the maintainer.
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Use Conventional Commits and run the local verification
+suite before opening a PR.
 
 ---
 

@@ -4,8 +4,8 @@
 
 Recommended container flow:
 
-1. Install dependencies with `npm ci`.
-2. Build the monorepo with `npm run build`.
+1. Install dependencies with `pnpm install --frozen-lockfile`.
+2. Build the monorepo with `pnpm run build`.
 3. Start the required package or app using the generated `dist` entrypoint.
 
 For local orchestration, `docker-compose.yml` provides the quickest path for demo services.
@@ -47,19 +47,18 @@ Required Doppler secret for npm publishing:
 
 ### Package release
 
-Use Changesets to prepare versions:
+Use release-please to prepare versions:
 
 ```bash
-npx changeset
-npm run build
-npm run test
-npm run release
+pnpm run release:dry-run
+pnpm run build
+pnpm run test
 ```
 
-In CI, use the manual `Release Publish` GitHub workflow, the Azure release
-pipeline, or the GitLab `publish_npm` job. Those jobs install the Doppler CLI,
-verify required secrets without printing their values, and publish with
-`scripts/ci/npm-publish-with-doppler.sh`.
+In CI, release-please creates GitHub releases after release pull requests merge.
+Manual Azure and GitLab publish jobs remain fallback paths; they install the
+Doppler CLI, verify required secrets without printing their values, and publish
+with `scripts/ci/publish-with-doppler.sh`.
 
 ### Docs deployment
 
@@ -67,8 +66,8 @@ For Vercel:
 
 ```bash
 cd docs-site
-npm install
-npm run build
+pnpm install
+pnpm run build
 vercel
 vercel --prod
 ```
@@ -77,8 +76,8 @@ For Netlify:
 
 ```bash
 cd docs-site
-npm install
-npm run build
+pnpm install
+pnpm run build
 netlify deploy --dir .vitepress/dist --prod
 ```
 

@@ -14,8 +14,8 @@ local A2A control plane.
 ```bash
 cp .env.example .env
 # Add your OPENAI_API_KEY to .env
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 By default the demo starts an embedded local registry on `:3099` when it cannot reach one.
@@ -29,7 +29,7 @@ By default the demo starts an embedded local registry on `:3099` when it cannot 
 | Orchestrator | `:3003` | Coordinates the pipeline and exposes the public A2A API |
 
 Registry runs at `:3099`. Open `http://localhost:3099/agents` to inspect registered agents or run
-the control plane UI from this monorepo with `cd apps/registry-ui && npm run dev`.
+the control plane UI from this monorepo with `cd apps/registry-ui && pnpm run dev`.
 
 ## Send a task
 
@@ -54,5 +54,5 @@ curl -X POST http://localhost:3003/rpc \
 ## Verify with the smoke test
 
 ```bash
-npm run smoke-test
+pnpm run smoke-test
 ```

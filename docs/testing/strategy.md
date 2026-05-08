@@ -7,13 +7,13 @@ The `a2a-mesh` platform relies on a layered testing matrix to ensure extreme rel
 1. **Unit Tests (Vitest)**
    - Located inside `packages/*/tests/`.
    - Goal: Test isolated algorithms, classes, storage adapters, and routing logic.
-   - Execution: `npm run test:unit`
+   - Execution: `pnpm run test:unit`
 
 2. **Integration Tests (Vitest + Supertest / HTTP)**
    - Located in the root `tests/integration/` folder.
    - Goal: Spin up real `A2AServer`, `RegistryServer`, and multiple `A2AClient` nodes running on ephemeral ports.
    - Validates end-to-end multi-agent pipelines (Orchestrator -> Researcher -> Writer).
-   - Execution: `npm run test:integration`
+   - Execution: `pnpm run test:integration`
 
 3. **Contract / CLI Smoke Tests**
    - Located in `cli/tests/`.

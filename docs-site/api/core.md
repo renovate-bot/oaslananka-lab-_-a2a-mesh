@@ -1,3 +1,3 @@
 # Core API Reference
 
-Run `npm run docs:api` to regenerate this section from TypeDoc.
+Run `pnpm run docs:api` to regenerate this section from TypeDoc.

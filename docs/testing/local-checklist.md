@@ -4,24 +4,23 @@ Before opening a PR or marking a Phase as "READY", you **must** run the followin
 
 ```bash
 # 1. Dependency alignment
-npm ci
+pnpm install --frozen-lockfile
 
 # 2. Static Analysis
-npm run lint
+pnpm run lint
 
 # 3. Type Checking
-npm run typecheck
+pnpm run typecheck
 
 # 4. Monorepo Build (CJS/ESM compatibility check)
-npm run build
+pnpm run build
 
 # 5. Core Unit Tests & Fast Integration Tests
-npm run test
+pnpm run test
 
 # 6. E2E Browser Smoke Tests
-cd apps/registry-ui
-npm install -D @playwright/test
-npx playwright test
+pnpm run ui:install:browsers
+pnpm run ui:test:e2e
 ```
 
 ## Troubleshooting Flakes

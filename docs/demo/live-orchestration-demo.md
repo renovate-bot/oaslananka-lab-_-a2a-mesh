@@ -17,7 +17,7 @@ Open two terminals.
 **Terminal 1:** Start the backend mesh services and the agents.
 
 ```bash
-npm run demo:local
+pnpm run demo:local
 ```
 
 This command starts the local Registry on port `3099`, the Researcher on `3001`, the Writer on `3002`, and the Orchestrator on `3003`, then registers them automatically.
@@ -26,8 +26,8 @@ This command starts the local Registry on port `3099`, the Researcher on `3001`,
 
 ```bash
 cd apps/registry-ui
-npm install
-npx vite
+pnpm install
+pnpm dlx vite
 ```
 
 Navigate to <http://localhost:5173> in your browser.

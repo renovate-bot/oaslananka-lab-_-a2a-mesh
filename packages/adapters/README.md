@@ -14,7 +14,7 @@ Framework adapters for running A2A agents on top of popular provider and orchest
 ## Install
 
 ```bash
-npm install a2a-mesh-adapters
+pnpm add a2a-mesh-adapters
 ```
 
 Install only the peer SDKs you need for your chosen adapters.
