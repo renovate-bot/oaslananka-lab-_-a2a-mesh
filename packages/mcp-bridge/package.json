@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "a2a-mesh": "^1.2.0"
+    "a2a-mesh": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

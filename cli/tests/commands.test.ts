@@ -88,7 +88,7 @@ describe('scaffoldAgent', () => {
     expect(envExample).toContain('A2A_API_KEY=your-secure-api-key-here');
     expect(agentSource).toContain("name: 'x-api-key'");
     expect(agentSource).toContain('maxRequests: 100');
-    expect(dockerfile).toContain('FROM node:20-alpine');
+    expect(dockerfile).toContain('FROM node:24-alpine@sha256:');
   });
 
   it('renders provider-specific templates for OpenAI, Anthropic and LangChain', async () => {
@@ -102,21 +102,21 @@ describe('scaffoldAgent', () => {
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'npm',
+        packageManager: 'pnpm',
       });
       scaffoldAgent('anthropic-agent', {
         adapter: 'anthropic',
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'yarn',
+        packageManager: 'pnpm',
       });
       scaffoldAgent('langchain-agent', {
         adapter: 'langchain',
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'npm',
+        packageManager: 'pnpm',
       });
     } finally {
       process.chdir(previousCwd);
@@ -167,7 +167,7 @@ describe('scaffoldAgent', () => {
           auth: false,
           rateLimit: false,
           docker: false,
-          packageManager: 'npm',
+          packageManager: 'pnpm',
         }),
       ).toThrow('exit:1');
       expect(exitSpy).toHaveBeenCalledWith(1);

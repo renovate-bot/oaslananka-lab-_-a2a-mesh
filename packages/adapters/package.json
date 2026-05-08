@@ -33,13 +33,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.2.0"
+    "a2a-mesh": "workspace:^"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.39.0 || ^0.95.0",
     "langchain": "^0.3.37 || ^1.0.0",
-    "llamaindex": "^0.9.11",
-    "openai": "^4.20.0"
+    "llamaindex": "^0.9.11 || ^0.12.0",
+    "openai": "^4.20.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
@@ -56,11 +56,11 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.95.1",
     "langchain": "^1.2.39",
-    "llamaindex": "^0.9.11",
-    "openai": "^4.104.0",
-    "typescript": "^5.2.2"
+    "openai": "^6.37.0",
+    "typescript": "^5.2.2",
+    "zod": "^4.4.3"
   },
   "type": "module",
   "engines": {

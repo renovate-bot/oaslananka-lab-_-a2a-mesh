@@ -52,7 +52,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "better-sqlite3": "^11.10.0"
+    "better-sqlite3": "^12.9.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {

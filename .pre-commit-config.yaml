@@ -25,6 +25,6 @@ repos:
       - id: eslint-staged
         name: ESLint (staged)
         language: system
-        entry: npx lint-staged
+        entry: pnpm exec lint-staged
         pass_filenames: false
         stages: [pre-commit]

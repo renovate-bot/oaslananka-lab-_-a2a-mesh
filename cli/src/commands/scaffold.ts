@@ -8,7 +8,7 @@ export type ScaffoldAdapter =
   | 'langchain'
   | 'pack-research-team'
   | 'pack-support-triage';
-export type ScaffoldPackageManager = 'npm' | 'pnpm' | 'yarn';
+export type ScaffoldPackageManager = 'pnpm';
 
 export interface ScaffoldOptions {
   adapter: ScaffoldAdapter;
@@ -29,9 +29,11 @@ function renderPackageJson(name: string, adapter: ScaffoldAdapter): string {
     adapter === 'pack-research-team' ||
     adapter === 'pack-support-triage'
   ) {
-    dependencies.openai = '^4.104.0';
+    dependencies.openai = '^6.37.0';
+    dependencies.zod = '^4.4.3';
   } else if (adapter === 'anthropic') {
-    dependencies['@anthropic-ai/sdk'] = '^0.39.0';
+    dependencies['@anthropic-ai/sdk'] = '^0.95.1';
+    dependencies.zod = '^4.4.3';
   } else if (adapter === 'langchain') {
     dependencies.langchain = '^1.2.39';
   }
@@ -45,6 +47,7 @@ function renderPackageJson(name: string, adapter: ScaffoldAdapter): string {
       version: '0.1.0',
       private: true,
       type: 'module',
+      packageManager: 'pnpm@11.0.8',
       scripts: {
         dev: 'tsx src/index.ts',
         build: 'tsc -p tsconfig.json',
@@ -269,7 +272,7 @@ import { createResearcher, createAnalyst, createWriter } from './agent.js';
 
 const registry = new RegistryServer();
 registry.start(3099);
-console.log('Registry listening on 3099');
+process.stdout.write('Registry listening on 3099\\n');
 
 const researcher = createResearcher();
 const analyst = createAnalyst();
@@ -284,7 +287,7 @@ await client.register('http://localhost:3001', researcher.getAgentCard());
 await client.register('http://localhost:3002', analyst.getAgentCard());
 await client.register('http://localhost:3003', writer.getAgentCard());
 
-console.log('🚀 Research Team is running and registered! View them in the A2A Registry Control Plane.');`;
+process.stdout.write('Research Team is running and registered. View them in the A2A Registry Control Plane.\\n');`;
   }
 
   if (options.adapter === 'pack-support-triage') {
@@ -294,7 +297,7 @@ import { createSupportAgent, createTechnicalSpecialist } from './agent.js';
 
 const registry = new RegistryServer();
 registry.start(3099);
-console.log('Registry listening on 3099');
+process.stdout.write('Registry listening on 3099\\n');
 
 const support = createSupportAgent();
 const tech = createTechnicalSpecialist();
@@ -306,7 +309,7 @@ const client = new AgentRegistryClient('http://localhost:3099');
 await client.register('http://localhost:3001', support.getAgentCard());
 await client.register('http://localhost:3002', tech.getAgentCard());
 
-console.log('🚀 Support Triage Team is running and registered! View them in the A2A Registry Control Plane.');`;
+process.stdout.write('Support Triage Team is running and registered. View them in the A2A Registry Control Plane.\\n');`;
   }
 
   return `import { createAgent } from './agent.js';
@@ -334,37 +337,32 @@ function renderEnvExample(options: ScaffoldOptions): string {
 }
 
 function renderDockerfile(): string {
-  return `FROM node:20-alpine
+  return `FROM node:24-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749
 WORKDIR /app
+RUN corepack enable
 
-COPY package*.json ./
-RUN npm install
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+USER node
+CMD ["pnpm", "run", "start"]
 `;
 }
 
 function renderReadme(name: string, options: ScaffoldOptions): string {
-  const installCommand =
-    options.packageManager === 'pnpm'
-      ? 'pnpm install'
-      : options.packageManager === 'yarn'
-        ? 'yarn'
-        : 'npm install';
-
   return `# ${name}
 
 Scaffolded with \`a2a scaffold\`.
 
 ## Getting started
 
-1. Install dependencies with \`${installCommand}\`
+1. Install dependencies with \`pnpm install\`
 2. Copy \`.env.example\` to \`.env\`
-3. Run \`${options.packageManager === 'npm' ? 'npm run dev' : `${options.packageManager} dev`}\`
+3. Run \`pnpm dev\`
 
 ## Selected options
 
@@ -405,10 +403,7 @@ export function scaffoldAgent(name: string, options: ScaffoldOptions): void {
   }
 
   const isPack = options.adapter.startsWith('pack-');
-  const runCmd =
-    options.packageManager === 'npm'
-      ? 'npm install && npm run dev'
-      : `${options.packageManager} install && ${options.packageManager} dev`;
+  const runCmd = 'pnpm install && pnpm dev';
 
   const output = [
     '\x1b[32m✨ Scaffold complete!\x1b[0m',

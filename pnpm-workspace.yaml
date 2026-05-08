@@ -1,0 +1,27 @@
+packages:
+  - apps/*
+  - cli
+  - docs-site
+  - packages/*
+
+engineStrict: true
+strictPeerDependencies: false
+autoInstallPeers: false
+
+overrides:
+  '@hono/node-server': 1.19.13
+  esbuild: 0.25.12
+  hono: 4.12.18
+  langsmith: 0.5.21
+  postcss: 8.5.10
+  protobufjs: 7.5.5
+  smol-toml: 1.6.1
+  uuid: 14.0.0
+  vite: 6.4.2
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  libxmljs2: true
+  protobufjs: true
+  tree-sitter: true

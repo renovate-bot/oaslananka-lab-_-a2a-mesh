@@ -234,7 +234,7 @@ program
   .option('--auth', 'Include API key authentication')
   .option('--rate-limit', 'Include default rate limiting')
   .option('--docker', 'Include Dockerfile')
-  .option('--package-manager <packageManager>', 'Preferred package manager', 'npm')
+  .option('--package-manager <packageManager>', 'Preferred package manager', 'pnpm')
   .action(
     (
       name: string,
@@ -251,7 +251,7 @@ program
         auth: commandOptions.auth ?? false,
         rateLimit: commandOptions.rateLimit ?? false,
         docker: commandOptions.docker ?? false,
-        packageManager: commandOptions.packageManager,
+        packageManager: 'pnpm',
       });
     },
   );
