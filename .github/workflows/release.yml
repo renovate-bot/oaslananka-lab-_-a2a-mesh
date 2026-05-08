@@ -27,9 +27,9 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      release_data: ${{ toJSON(steps.release.outputs) }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
     steps:
       - name: Run release-please
         id: release
@@ -42,7 +42,14 @@ jobs:
   release-assets:
     name: Build and attach release assets
     needs: release
-    if: ${{ needs.release.outputs.release_created == 'true' }}
+    if: >-
+      ${{
+        (
+          needs.release.outputs.paths_released != '' &&
+          needs.release.outputs.paths_released != '[]'
+        ) ||
+        github.event_name == 'workflow_dispatch'
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -51,7 +58,9 @@ jobs:
       attestations: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
+      RELEASE_DATA: ${{ needs.release.outputs.release_data }}
+      RELEASES_CREATED: ${{ needs.release.outputs.releases_created }}
+      PATHS_RELEASED: ${{ needs.release.outputs.paths_released }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -84,6 +93,50 @@ jobs:
           mkdir -p .artifacts/release
           cp .artifacts/npm/*.tgz .artifacts/release/
 
+      - name: Resolve release tags
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const { writeFileSync } = require('node:fs');
+          const releaseData = JSON.parse(process.env.RELEASE_DATA || '{}');
+          const paths = JSON.parse(process.env.PATHS_RELEASED || '[]');
+          const tags = [];
+
+          if (process.env.RELEASES_CREATED === 'true') {
+            for (const path of paths) {
+              const key = path === '.' ? 'tag_name' : `${path}--tag_name`;
+              if (releaseData[key]) tags.push(releaseData[key]);
+            }
+          } else {
+            const releases = JSON.parse(execFileSync('gh', [
+              'release',
+              'list',
+              '--limit',
+              '100',
+              '--json',
+              'tagName,isDraft',
+            ], { encoding: 'utf8' }));
+            for (const release of releases) {
+              if (release.isDraft) continue;
+              const assets = JSON.parse(execFileSync('gh', [
+                'release',
+                'view',
+                release.tagName,
+                '--json',
+                'assets',
+              ], { encoding: 'utf8' })).assets;
+              if (assets.length === 0) tags.push(release.tagName);
+            }
+          }
+
+          const uniqueTags = [...new Set(tags)].filter(Boolean).sort();
+          if (uniqueTags.length === 0) {
+            throw new Error('No release tags resolved for asset upload');
+          }
+          writeFileSync('.artifacts/release-tags.txt', `${uniqueTags.join('\n')}\n`);
+          NODE
+
       - name: Generate SBOM
         run: |
           set -euo pipefail
@@ -109,10 +162,14 @@ jobs:
       - name: Attach assets to release
         run: |
           set -euo pipefail
-          gh release upload "${RELEASE_TAG}" .artifacts/release/*
+          while IFS= read -r release_tag; do
+            gh release upload "${release_tag}" .artifacts/release/* --clobber
+          done < .artifacts/release-tags.txt
 
       - name: Verify release assets
         run: |
           set -euo pipefail
-          gh release view "${RELEASE_TAG}" --json tagName,isDraft,assets \
-            --jq ". as \$release | if (\$release.isDraft == false and (\$release.assets | length) >= 3) then \$release.tagName else error(\"release assets missing\") end"
+          while IFS= read -r release_tag; do
+            gh release view "${release_tag}" --json tagName,isDraft,assets \
+              --jq ". as \$release | if (\$release.isDraft == false and (\$release.assets | length) >= 3) then \$release.tagName else error(\"release assets missing\") end"
+          done < .artifacts/release-tags.txt
