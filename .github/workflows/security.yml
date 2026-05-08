@@ -17,10 +17,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
   gitleaks:
     name: Gitleaks (secret scan)
@@ -36,6 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Gitleaks
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -48,6 +45,7 @@ jobs:
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
 
       - name: Run Gitleaks
+        shell: bash
         run: |
           set -euo pipefail
           gitleaks detect --source . --config .gitleaks.toml --redact --verbose
@@ -99,16 +97,19 @@ jobs:
           node-version-file: .node-version
 
       - name: Enable pnpm
+        shell: bash
         run: |
           set -euo pipefail
           corepack enable
 
       - name: Install dependencies
+        shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
 
       - name: Audit production dependencies
+        shell: bash
         run: |
           set -euo pipefail
           pnpm audit --audit-level high --prod
@@ -137,6 +138,7 @@ jobs:
           publish_results: true
 
       - name: Enforce Scorecard threshold
+        shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
@@ -183,6 +185,7 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
+        shell: bash
         run: |
           set -euo pipefail
           curl -LsSf https://astral.sh/uv/install.sh | sh

@@ -2,18 +2,16 @@
 
 ## [1.3.0](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-registry-v1.2.0...a2a-mesh-registry-v1.3.0) (2026-05-08)
 
-
 ### Features
 
-* enhance registry server with unresolved hostname support and authentication checks ([d740ec8](https://github.com/oaslananka-lab/a2a-mesh/commit/d740ec8de62f4451f1aaed7113e49b81da2e7ab6))
-* **tests:** add integration tests for Azure DevOps script and client-server interactions ([58e4f1e](https://github.com/oaslananka-lab/a2a-mesh/commit/58e4f1e70f44c35b10130d850c94fbb64acebdd1))
-
+- enhance registry server with unresolved hostname support and authentication checks ([d740ec8](https://github.com/oaslananka-lab/a2a-mesh/commit/d740ec8de62f4451f1aaed7113e49b81da2e7ab6))
+- **tests:** add integration tests for Azure DevOps script and client-server interactions ([58e4f1e](https://github.com/oaslananka-lab/a2a-mesh/commit/58e4f1e70f44c35b10130d850c94fbb64acebdd1))
 
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * dependencies
-    * a2a-mesh bumped to 1.3.0
+- The following workspace dependencies were updated
+  - dependencies
+    - a2a-mesh bumped to 1.3.0
 
 ## 1.2.0
 
