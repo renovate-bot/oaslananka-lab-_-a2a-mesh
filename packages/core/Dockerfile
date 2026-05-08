@@ -16,10 +16,11 @@ FROM node:24-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=builder /app/deploy ./
+RUN addgroup -g 10001 -S a2a && adduser -S -D -H -u 10001 -G a2a a2a
+COPY --from=builder --chown=a2a:a2a /app/deploy ./
 
 EXPOSE 3000
-USER node
+USER a2a
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
