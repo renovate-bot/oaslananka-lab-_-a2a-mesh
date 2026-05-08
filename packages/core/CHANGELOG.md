@@ -1,5 +1,20 @@
 # a2a-mesh
 
+## [1.3.0](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-v1.2.0...a2a-mesh-v1.3.0) (2026-05-08)
+
+
+### Features
+
+* enhance registry server with unresolved hostname support and authentication checks ([d740ec8](https://github.com/oaslananka-lab/a2a-mesh/commit/d740ec8de62f4451f1aaed7113e49b81da2e7ab6))
+* **tests:** add integration tests for Azure DevOps script and client-server interactions ([58e4f1e](https://github.com/oaslananka-lab/a2a-mesh/commit/58e4f1e70f44c35b10130d850c94fbb64acebdd1))
+
+
+### Bug Fixes
+
+* align CI type checks with FSM semantics ([dc20bb9](https://github.com/oaslananka-lab/a2a-mesh/commit/dc20bb97d8bd911e73b9cb35781d5c62ba0b3061))
+* **docker:** align runtime user with helm security context ([eae79b3](https://github.com/oaslananka-lab/a2a-mesh/commit/eae79b3094480de10cc032b5ddcb7136eb331957))
+* **release:** close publish and docker review gaps ([fd04d75](https://github.com/oaslananka-lab/a2a-mesh/commit/fd04d75a3c247db8f85585851d1a326863507922))
+
 ## 1.2.0
 
 ### Minor Changes

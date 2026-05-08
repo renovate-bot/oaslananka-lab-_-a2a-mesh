@@ -1,5 +1,24 @@
 # create-a2a-mesh
 
+## [1.3.0](https://github.com/oaslananka-lab/a2a-mesh/compare/create-a2a-mesh-v1.2.0...create-a2a-mesh-v1.3.0) (2026-05-08)
+
+
+### Features
+
+* **tests:** add integration tests for Azure DevOps script and client-server interactions ([58e4f1e](https://github.com/oaslananka-lab/a2a-mesh/commit/58e4f1e70f44c35b10130d850c94fbb64acebdd1))
+
+
+### Bug Fixes
+
+* **cli:** keep scaffold package manager consistent ([c13345e](https://github.com/oaslananka-lab/a2a-mesh/commit/c13345ea13383efe16e2de57b933c9448b422396))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * a2a-mesh-cli bumped to 1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
