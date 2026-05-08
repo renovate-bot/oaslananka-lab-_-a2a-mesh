@@ -30,10 +30,16 @@ Recommended split:
 
 ## Release workflow
 
-CI/CD automation runs from the GitHub organization mirror, while Azure DevOps,
-GitLab, and the personal GitHub repository remain manual fallback targets.
-Release jobs pull publish credentials from Doppler at runtime instead of storing
-the final publishing tokens in each CI platform.
+The personal GitHub repository (`oaslananka/a2a-mesh`) is the source
+repository. The organization repository (`oaslananka-lab/a2a-mesh`) is the
+CI/CD mirror where GitHub Actions run. The organization mirror syncs from the
+personal `main` branch on schedule or manual dispatch, opens a sync pull
+request when the repositories diverge, and runs the required checks before the
+mirror is updated.
+
+Release jobs run in the organization repository and pull publish credentials
+from Doppler at runtime instead of storing the final publishing tokens in each
+CI platform. Azure DevOps and GitLab remain manual fallback targets.
 
 Required bootstrap variables for manual release jobs:
 
