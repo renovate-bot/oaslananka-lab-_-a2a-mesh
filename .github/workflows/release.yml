@@ -61,8 +61,6 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24.14.1
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Enable pnpm
         run: |
@@ -96,7 +94,9 @@ jobs:
         run: |
           set -euo pipefail
           cd .artifacts/release
-          sha256sum * > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS
 
       - name: Generate provenance attestation
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
@@ -112,4 +112,4 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "${RELEASE_TAG}" --json tagName,isDraft,assets \
-            --jq '. as $release | if ($release.isDraft == false and ($release.assets | length) >= 3) then $release.tagName else error("release assets missing") end'
+            --jq ". as \$release | if (\$release.isDraft == false and (\$release.assets | length) >= 3) then \$release.tagName else error(\"release assets missing\") end"

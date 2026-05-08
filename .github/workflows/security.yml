@@ -97,8 +97,6 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Enable pnpm
         run: |
@@ -141,7 +139,15 @@ jobs:
       - name: Enforce Scorecard threshold
         run: |
           set -euo pipefail
-          node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('scorecard-results.json','utf8')); const score=Number(data.score); if (!Number.isFinite(score) || score < 7) { throw new Error(`OSSF Scorecard ${score} is below 7.0`); } console.log(`OSSF Scorecard ${score} >= 7.0`);"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync('scorecard-results.json', 'utf8'));
+          const score = Number(data.score);
+          if (!Number.isFinite(score) || score < 7) {
+            throw new Error('OSSF Scorecard ' + score + ' is below 7.0');
+          }
+          console.log('OSSF Scorecard ' + score + ' >= 7.0');
+          NODE
 
       - name: Run OSSF Scorecard SARIF
         uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
