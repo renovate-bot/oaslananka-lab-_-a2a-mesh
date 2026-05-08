@@ -10,18 +10,13 @@ RUN pnpm install --frozen-lockfile --filter a2a-mesh...
 
 COPY . .
 RUN pnpm --filter a2a-mesh run build
+RUN pnpm --filter a2a-mesh --prod deploy /app/deploy
 
 FROM node:24-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
 
-COPY --from=builder /app/packages/core/dist ./dist
-COPY --from=builder /app/packages/core/package.json ./package.json
-COPY --from=builder /app/packages/core/LICENSE ./LICENSE
-COPY --from=builder /app/packages/core/README.md ./README.md
-
-RUN pnpm install --prod --ignore-scripts
+COPY --from=builder /app/deploy ./
 
 EXPOSE 3000
 USER node

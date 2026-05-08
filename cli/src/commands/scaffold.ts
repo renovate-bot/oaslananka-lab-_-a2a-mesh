@@ -341,10 +341,9 @@ function renderDockerfile(): string {
 WORKDIR /app
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
-
 COPY . .
+RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --lockfile-only && pnpm install --frozen-lockfile; fi
+
 RUN pnpm run build
 
 EXPOSE 3000
