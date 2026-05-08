@@ -2,7 +2,7 @@
 
 ## Versioning model
 
-The repository uses Changesets for package versioning and changelog generation.
+The repository uses release-please manifest mode for package versioning and changelog generation.
 
 ## Semantic intent
 
@@ -23,13 +23,13 @@ These packages are linked for coordinated releases:
 ## Author workflow
 
 ```bash
-npx changeset
+pnpm run release:dry-run
 ```
 
-Choose the affected packages, write a concise summary, and commit the generated markdown file with the feature or fix.
+Use Conventional Commits so release-please can derive SemVer changes from merged history.
 
 ## Release workflow
 
-- Maintainers apply version updates through Changesets.
-- Maintainers publish npm packages manually from a verified local environment.
+- Release pull requests apply version and changelog updates.
+- GitHub Actions builds release assets, SBOM, checksums, and provenance after a release is created.
 - The root `CHANGELOG.md` remains the canonical public release log.

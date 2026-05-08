@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "separate-pull-requests": false,
+  "plugins": [
+    {
+      "type": "node-workspace"
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "stable packages",
+      "components": [
+        "a2a-mesh",
+        "a2a-mesh-adapters",
+        "a2a-mesh-registry",
+        "a2a-mesh-cli",
+        "create-a2a-mesh"
+      ]
+    }
+  ],
+  "packages": {
+    "packages/core": {
+      "package-name": "a2a-mesh",
+      "component": "a2a-mesh",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/adapters": {
+      "package-name": "a2a-mesh-adapters",
+      "component": "a2a-mesh-adapters",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/registry": {
+      "package-name": "a2a-mesh-registry",
+      "component": "a2a-mesh-registry",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "cli": {
+      "package-name": "a2a-mesh-cli",
+      "component": "a2a-mesh-cli",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/create-a2a-agent": {
+      "package-name": "create-a2a-mesh",
+      "component": "create-a2a-mesh",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/mcp-bridge": {
+      "package-name": "a2a-mesh-mcp-bridge",
+      "component": "a2a-mesh-mcp-bridge",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/ws": {
+      "package-name": "a2a-mesh-ws",
+      "component": "a2a-mesh-ws",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}

@@ -1,21 +1,7 @@
-parameters:
-  - name: dryRun
-    displayName: 'Dry run'
-    type: boolean
-    default: true
-  - name: publishApproved
-    displayName: 'Publish approved by maintainer'
-    type: boolean
-    default: false
-
 trigger: none
 pr: none
 
 variables:
-  - name: DRY_RUN
-    value: ${{ parameters.dryRun }}
-  - name: PUBLISH_APPROVED
-    value: ${{ parameters.publishApproved }}
   - name: DOPPLER_PROJECT
     value: all
   - name: DOPPLER_CONFIG
@@ -23,90 +9,80 @@ variables:
 
 stages:
   - stage: ValidateRelease
-    displayName: 'Validate release candidate'
+    displayName: 'Validate release automation'
     jobs:
       - job: Validate
-        displayName: 'Validate release candidate'
+        displayName: 'Validate release automation'
         pool:
-          vmImage: 'ubuntu-latest'
+          vmImage: 'ubuntu-24.04'
         steps:
           - checkout: self
-            persistCredentials: true
+            persistCredentials: false
             fetchDepth: 0
 
           - script: |
-              bash scripts/setup-node.sh '22.22.2' '10.9.8'
-            displayName: 'Setup Node.js 22.22.2 + npm 10.9.8'
-
-          - script: npm ci
-            displayName: 'Install dependencies'
-
-          - script: npm ci --prefix docs-site --prefer-offline
-            displayName: 'Install docs-site dependencies'
+              set -euo pipefail
+              bash scripts/setup-node.sh '24.14.1'
+            displayName: 'Setup Node.js 24.14.1 + pnpm'
 
           - script: |
-              echo "Release pipeline dry run: $(DRY_RUN)"
-              echo "Publish approved: $(PUBLISH_APPROVED)"
-              echo "Source branch: $(Build.SourceBranch)"
-              echo "Source branch name: $(Build.SourceBranchName)"
-            displayName: 'Show release mode'
+              set -euo pipefail
+              pnpm install --frozen-lockfile
+            displayName: 'Install dependencies'
 
-          - script: npx lychee --config .lychee.toml docs-site --offline || true
-            displayName: 'Link check (non-blocking)'
-
-          - script: npm run ui:install:browsers
+          - script: |
+              set -euo pipefail
+              pnpm run ui:install:browsers
             displayName: 'Install Playwright browsers'
 
-          - script: npm run check
+          - script: |
+              set -euo pipefail
+              pnpm run check
             displayName: 'Run repository check'
 
-          - script: npm audit --omit=dev --audit-level=high
+          - script: |
+              set -euo pipefail
+              pnpm audit --audit-level high --prod
             displayName: 'Security audit'
 
           - script: |
-              echo "Planned publish set:"
-              node -e "for (const pkg of ['packages/core','packages/adapters','packages/registry','cli','packages/create-a2a-agent']) { const manifest = require('./' + pkg + '/package.json'); console.log('- ' + manifest.name + '@' + manifest.version); }"
-            displayName: 'Show publish plan'
-
-          - script: |
-              echo "Dry run enabled; the npm-production environment gate will be skipped."
-            displayName: 'Skip publish (dry run)'
-            condition: and(succeeded(), eq(variables['DRY_RUN'], 'true'))
-
-          - script: |
-              echo "Publish approval parameter is false; the npm-production environment gate will be skipped."
-            displayName: 'Skip publish (approval parameter required)'
-            condition: and(succeeded(), ne(variables['DRY_RUN'], 'true'), ne(variables['PUBLISH_APPROVED'], 'true'))
+              set -euo pipefail
+              pnpm run release:dry-run
+            displayName: 'Release config dry run'
 
   - stage: PublishRelease
     displayName: 'Publish to npm'
     dependsOn: ValidateRelease
-    condition: and(succeeded(), ne(variables['DRY_RUN'], 'true'), eq(variables['PUBLISH_APPROVED'], 'true'))
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - deployment: PublishToNpm
         displayName: 'Publish packages to npm'
         environment: 'npm-production'
         pool:
-          vmImage: 'ubuntu-latest'
+          vmImage: 'ubuntu-24.04'
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
-                  persistCredentials: true
+                  persistCredentials: false
                   fetchDepth: 0
 
                 - script: |
-                    bash scripts/setup-node.sh '22.22.2' '10.9.8'
-                  displayName: 'Setup Node.js 22.22.2 + npm 10.9.8'
+                    set -euo pipefail
+                    bash scripts/setup-node.sh '24.14.1'
+                  displayName: 'Setup Node.js 24.14.1 + pnpm'
 
-                - script: npm ci
+                - script: |
+                    set -euo pipefail
+                    pnpm install --frozen-lockfile
                   displayName: 'Install dependencies'
 
                 - script: bash scripts/ci/install-doppler-cli.sh
                   displayName: 'Install Doppler CLI'
 
                 - script: |
+                    set -euo pipefail
                     bash scripts/ci/doppler-required.sh NPM_TOKEN
                   displayName: 'Verify Doppler release secrets'
                   env:
@@ -115,25 +91,13 @@ stages:
                     DOPPLER_CONFIG: $(DOPPLER_CONFIG)
 
                 - script: |
-                    echo "Environment approval granted. Proceeding with npm publish."
-                    echo "Publishing from $(Build.SourceBranch) at $(Build.SourceVersion)"
-                  displayName: 'Confirm environment approval'
+                    set -euo pipefail
+                    pnpm run pack:release
+                  displayName: 'Pack release artifacts'
 
                 - script: |
-                    echo "Planned publish set:"
-                    node -e "for (const pkg of ['packages/core','packages/adapters','packages/registry','cli','packages/create-a2a-agent']) { const manifest = require('./' + pkg + '/package.json'); console.log('- ' + manifest.name + '@' + manifest.version); }"
-                  displayName: 'Show publish plan'
-
-                - script: |
-                    npx changeset version
-                    git config user.email "ci-bot@a2a-mesh.local"
-                    git config user.name "a2a-mesh CI"
-                    git add -A
-                    git commit -m "chore: version packages [skip ci]" || echo "No changes to commit"
-                  displayName: 'Apply changeset versions'
-
-                - script: |
-                    bash scripts/ci/npm-publish-with-doppler.sh
+                    set -euo pipefail
+                    bash scripts/ci/publish-with-doppler.sh
                   displayName: 'Publish packages to npm'
                   env:
                     DOPPLER_TOKEN: $(DOPPLER_TOKEN)

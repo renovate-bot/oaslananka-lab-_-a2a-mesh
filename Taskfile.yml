@@ -1,0 +1,55 @@
+version: '3'
+
+tasks:
+  format:
+    desc: Format repository files
+    cmds:
+      - pnpm run format
+
+  lint:
+    desc: Run code and Markdown linters
+    cmds:
+      - pnpm run lint
+      - pnpm run lint:md
+
+  typecheck:
+    desc: Typecheck all TypeScript projects
+    cmds:
+      - pnpm run typecheck
+
+  test:
+    desc: Run unit and integration tests
+    cmds:
+      - pnpm run test
+      - pnpm run test:integration
+
+  security:
+    desc: Run local dependency and secret scans
+    cmds:
+      - pnpm audit --audit-level moderate
+      - gitleaks detect --source . --config .gitleaks.toml --redact --verbose
+
+  build:
+    desc: Build packages and docs
+    cmds:
+      - pnpm run build
+      - pnpm run docs:build
+
+  release:dry-run:
+    desc: Validate release-please without creating tags or releases
+    cmds:
+      - pnpm run release:dry-run
+
+  ci:
+    desc: Run the local CI gate
+    cmds:
+      - pnpm run format:check
+      - pnpm run lint
+      - pnpm run lint:md
+      - pnpm run typecheck
+      - pnpm run test:coverage
+      - pnpm run test:integration
+      - pnpm audit --audit-level moderate
+      - pnpm run build
+      - pnpm run docs:build
+      - pnpm run release:dry-run

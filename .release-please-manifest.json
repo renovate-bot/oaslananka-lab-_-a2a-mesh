@@ -1,0 +1,9 @@
+{
+  "packages/core": "1.2.0",
+  "packages/adapters": "1.2.0",
+  "packages/registry": "1.2.0",
+  "cli": "1.2.0",
+  "packages/create-a2a-agent": "1.2.0",
+  "packages/mcp-bridge": "1.0.0",
+  "packages/ws": "1.0.0"
+}

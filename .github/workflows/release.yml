@@ -1,97 +1,115 @@
-name: Release Publish (Manual)
+name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Build and pack artifacts without publishing'
-        required: true
-        type: boolean
-        default: true
-      publish:
-        description: 'Publish npm packages'
-        required: true
-        type: boolean
-        default: false
-      confirm:
-        description: 'Type PUBLISH to allow npm publishing'
-        required: false
-        type: string
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.repository }}-${{ github.ref }}
+  group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    environment: npm-production
-    env:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-      DOPPLER_PROJECT: ${{ secrets.DOPPLER_PROJECT }}
-      DOPPLER_CONFIG: ${{ secrets.DOPPLER_CONFIG }}
+    name: Release Please
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
+  release-assets:
+    name: Build and attach release assets
+    needs: release
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 22.22.2
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            docs-site/package-lock.json
+          node-version: 24.14.1
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Pin npm 10.9.8
-        run: npm install --global npm@10.9.8
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          corepack enable
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Install docs-site dependencies
-        run: npm ci --prefix docs-site
-
-      - name: Install Doppler CLI
-        run: bash scripts/ci/install-doppler-cli.sh
-
-      - name: Install Playwright browsers
-        run: npm run ui:install:browsers
-
-      - name: Guard publish confirmation
-        if: ${{ inputs.publish && inputs.confirm != 'PUBLISH' }}
         run: |
-          echo "Publishing requires confirm=PUBLISH."
-          exit 1
+          set -euo pipefail
+          pnpm install --frozen-lockfile
 
-      - name: Verify Doppler release secrets
-        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
-        run: bash scripts/ci/doppler-required.sh NPM_TOKEN
-
-      - name: Run release check
-        run: npm run check
-
-      - name: Pack release artifacts
-        if: ${{ inputs.dry_run || !inputs.publish }}
+      - name: Run release build
         run: |
-          mkdir -p .artifacts/npm
-          npm pack --pack-destination .artifacts/npm --workspace packages/core --workspace packages/adapters --workspace packages/registry --workspace cli --workspace packages/create-a2a-agent
+          set -euo pipefail
+          pnpm run build
 
-      - name: Apply changeset versions
-        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
+      - name: Pack release tarballs
         run: |
-          npx changeset version
-          git config user.email "ci-bot@a2a-mesh.local"
-          git config user.name "a2a-mesh CI"
-          git add -A
-          git commit -m "chore: version packages [skip ci]" || echo "No changes to commit"
+          set -euo pipefail
+          pnpm run pack:release
+          mkdir -p .artifacts/release
+          cp .artifacts/npm/*.tgz .artifacts/release/
 
-      - name: Publish packages to npm with Doppler secrets
-        if: ${{ inputs.publish && inputs.confirm == 'PUBLISH' }}
-        run: bash scripts/ci/npm-publish-with-doppler.sh
+      - name: Generate SBOM
+        run: |
+          set -euo pipefail
+          pnpm sbom --sbom-format cyclonedx --lockfile-only \
+            > .artifacts/release/sbom.cdx.json
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd .artifacts/release
+          sha256sum * > SHA256SUMS
+
+      - name: Generate provenance attestation
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: .artifacts/release/*
+
+      - name: Attach assets to release
+        run: |
+          set -euo pipefail
+          gh release upload "${RELEASE_TAG}" .artifacts/release/*
+
+      - name: Verify release assets
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --json tagName,isDraft,assets \
+            --jq '. as $release | if ($release.isDraft == false and ($release.assets | length) >= 3) then $release.tagName else error("release assets missing") end'
