@@ -1,10 +1,7 @@
 import { mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = resolve(root, '.artifacts/npm');
+const outDir = '.artifacts/npm';
 const packageDirs = [
   'packages/core',
   'packages/adapters',
@@ -18,15 +15,29 @@ const packageDirs = [
 await mkdir(outDir, { recursive: true });
 
 for (const packageDir of packageDirs) {
+  const packDestination = packageDir === 'cli' ? '../.artifacts/npm' : '../../.artifacts/npm';
   const command = process.platform === 'win32' ? 'cmd.exe' : 'pnpm';
   const args =
     process.platform === 'win32'
-      ? ['/d', '/s', '/c', 'pnpm', '--dir', packageDir, 'pack', '--pack-destination', outDir]
-      : ['--dir', packageDir, 'pack', '--pack-destination', outDir];
+      ? [
+          '/d',
+          '/s',
+          '/c',
+          'pnpm',
+          '--dir',
+          packageDir,
+          'pack',
+          '--pack-destination',
+          packDestination,
+        ]
+      : ['--dir', packageDir, 'pack', '--pack-destination', packDestination];
   const result = spawnSync(command, args, {
-    cwd: root,
     stdio: 'inherit',
   });
+
+  if (result.error) {
+    console.error(result.error.message);
+  }
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1);

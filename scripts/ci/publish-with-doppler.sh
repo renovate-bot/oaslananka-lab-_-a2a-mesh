@@ -25,6 +25,8 @@ const workspaces = [
   'packages/registry',
   'cli',
   'packages/create-a2a-agent',
+  'packages/mcp-bridge',
+  'packages/ws',
 ];
 
 for (const workspace of workspaces) {
@@ -40,7 +42,7 @@ for (const workspace of workspaces) {
 NODE
 fi
 
-for workspace in packages/core packages/adapters packages/registry cli packages/create-a2a-agent; do
+for workspace in packages/core packages/adapters packages/registry cli packages/create-a2a-agent packages/mcp-bridge packages/ws; do
   pnpm --dir "$workspace" publish --access public --no-git-checks
 done
 BASH
