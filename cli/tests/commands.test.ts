@@ -71,7 +71,6 @@ describe('scaffoldAgent', () => {
         auth: true,
         rateLimit: true,
         docker: true,
-        packageManager: 'pnpm',
       });
     } finally {
       process.chdir(previousCwd);
@@ -102,21 +101,18 @@ describe('scaffoldAgent', () => {
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'pnpm',
       });
       scaffoldAgent('anthropic-agent', {
         adapter: 'anthropic',
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'pnpm',
       });
       scaffoldAgent('langchain-agent', {
         adapter: 'langchain',
         auth: false,
         rateLimit: false,
         docker: false,
-        packageManager: 'pnpm',
       });
     } finally {
       process.chdir(previousCwd);
@@ -167,7 +163,6 @@ describe('scaffoldAgent', () => {
           auth: false,
           rateLimit: false,
           docker: false,
-          packageManager: 'pnpm',
         }),
       ).toThrow('exit:1');
       expect(exitSpy).toHaveBeenCalledWith(1);

@@ -15,11 +15,7 @@ import {
 } from 'a2a-mesh';
 import { RegistryServer } from 'a2a-mesh-registry';
 import { discoverAgent } from './commands/discover.js';
-import {
-  scaffoldAgent,
-  type ScaffoldAdapter,
-  type ScaffoldPackageManager,
-} from './commands/scaffold.js';
+import { scaffoldAgent, type ScaffoldAdapter } from './commands/scaffold.js';
 
 interface CliOptions {
   json?: boolean;
@@ -234,7 +230,6 @@ program
   .option('--auth', 'Include API key authentication')
   .option('--rate-limit', 'Include default rate limiting')
   .option('--docker', 'Include Dockerfile')
-  .option('--package-manager <packageManager>', 'Preferred package manager', 'pnpm')
   .action(
     (
       name: string,
@@ -243,7 +238,6 @@ program
         auth?: boolean;
         rateLimit?: boolean;
         docker?: boolean;
-        packageManager: ScaffoldPackageManager;
       },
     ) => {
       scaffoldAgent(name, {
@@ -251,7 +245,6 @@ program
         auth: commandOptions.auth ?? false,
         rateLimit: commandOptions.rateLimit ?? false,
         docker: commandOptions.docker ?? false,
-        packageManager: 'pnpm',
       });
     },
   );

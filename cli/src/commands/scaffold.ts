@@ -8,14 +8,12 @@ export type ScaffoldAdapter =
   | 'langchain'
   | 'pack-research-team'
   | 'pack-support-triage';
-export type ScaffoldPackageManager = 'pnpm';
 
 export interface ScaffoldOptions {
   adapter: ScaffoldAdapter;
   auth: boolean;
   rateLimit: boolean;
   docker: boolean;
-  packageManager: ScaffoldPackageManager;
 }
 
 function renderPackageJson(name: string, adapter: ScaffoldAdapter): string {

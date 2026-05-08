@@ -24,7 +24,6 @@ pnpm dlx create-a2a-mesh my-agent --adapter openai --auth --rate-limit --docker
 - `--auth`
 - `--rate-limit`
 - `--docker`
-- `--package-manager <pnpm>`
 
 ## Output
 
