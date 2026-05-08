@@ -11,6 +11,7 @@
   "rules": [
     { "type": "deletion" },
     { "type": "non_fast_forward" },
+    { "type": "required_linear_history" },
     { "type": "required_signatures" },
     {
       "type": "pull_request",
@@ -31,7 +32,7 @@
           { "context": "build-and-test (24.14.1)" },
           { "context": "CodeQL" },
           { "context": "Gitleaks (secret scan)" },
-          { "context": "npm audit" }
+          { "context": "pnpm audit" }
         ]
       }
     }

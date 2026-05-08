@@ -3,6 +3,8 @@ image:
   tag: '1.0.0'
   pullPolicy: IfNotPresent
 
+namespace: a2a-mesh
+
 service:
   type: ClusterIP
   port: 3000
@@ -12,7 +14,13 @@ ingress:
   className: ''
   host: a2a-mesh.local
 
-resources: {}
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 autoscaling:
   enabled: true

@@ -14,26 +14,52 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   stryker:
     name: Stryker (core + adapters)
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
-          cache: npm
-      - run: npm install --global npm@10.9.8
-      - run: npm ci
-      - run: npm run build:packages
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          corepack enable
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: |
+          set -euo pipefail
+          pnpm run build:packages
+
       - name: Run Stryker
-        run: npx stryker run
+        run: |
+          set -euo pipefail
+          pnpm exec stryker run
         continue-on-error: true
+
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

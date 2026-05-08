@@ -5,49 +5,46 @@ trigger: none
 pr: none
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-24.04'
 
 steps:
   - checkout: self
     fetchDepth: 0
 
   - script: |
-      bash scripts/setup-node.sh '22.22.2' '10.9.8'
-    displayName: 'Setup Node.js 22.22.2 + npm 10.9.8'
+      set -euo pipefail
+      bash scripts/setup-node.sh '24.14.1'
+    displayName: 'Setup Node.js 24.14.1 + pnpm'
 
-  - script: npm ci
+  - script: |
+      set -euo pipefail
+      pnpm install --frozen-lockfile
     displayName: 'Install dependencies'
 
-  - script: npm ci --prefix docs-site --prefer-offline
-    displayName: 'Install docs-site dependencies'
-
-  - script: npx lychee --config .lychee.toml docs-site --offline || true
-    displayName: 'Link check (non-blocking)'
-
-  - script: npm run ui:install:browsers
+  - script: |
+      set -euo pipefail
+      pnpm run ui:install:browsers
     displayName: 'Install Playwright browsers'
 
-  - script: npm run check
+  - script: |
+      set -euo pipefail
+      pnpm run check
     displayName: 'Run repository check'
 
   - script: |
+      set -euo pipefail
       for pkg in packages/core packages/client packages/adapters packages/registry packages/testing packages/ws packages/grpc cli; do
         echo "Smoke testing $pkg..."
         if [ "$pkg" = "cli" ]; then
           if [ -f "./$pkg/dist/index.cjs" ]; then
-            node "./$pkg/dist/index.cjs" --help >/dev/null && echo "  ✓ $pkg"
+            node "./$pkg/dist/index.cjs" --help >/dev/null && echo "  ok $pkg"
           else
-            echo "  ⚠ $pkg/dist/index.cjs not found"
+            echo "  missing $pkg/dist/index.cjs"
           fi
         elif [ -f "./$pkg/dist/index.cjs" ]; then
-          node -e "require('./$pkg/dist/index.cjs')" && echo "  ✓ $pkg"
+          node -e "require('./$pkg/dist/index.cjs')" && echo "  ok $pkg"
         else
-          echo "  ⚠ $pkg/dist/index.cjs not found (may be ESM-only)"
+          echo "  missing $pkg/dist/index.cjs (may be ESM-only)"
         fi
       done
     displayName: 'Smoke test packages'
-
-  - script: |
-      npx changeset status --since=origin/main
-    displayName: 'Changeset check'
-    continueOnError: false

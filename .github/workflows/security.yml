@@ -14,14 +14,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   gitleaks:
     name: Gitleaks (secret scan)
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -30,25 +34,28 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
       - name: Install Gitleaks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           gh release download v8.30.1 \
             --repo gitleaks/gitleaks \
             --pattern "gitleaks_8.30.1_linux_x64.tar.gz" \
             --output gitleaks.tar.gz
           tar -xzf gitleaks.tar.gz gitleaks
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
       - name: Run Gitleaks
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gitleaks detect --source . --config .gitleaks.toml --redact --verbose
+        run: |
+          set -euo pipefail
+          gitleaks detect --source . --config .gitleaks.toml --redact --verbose
 
   trivy:
     name: Trivy (filesystem)
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -57,6 +64,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
@@ -66,16 +74,18 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          exit-code: '1'
+
       - name: Upload Trivy SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
         with:
           sarif_file: trivy-results.sarif
 
-  npm-audit:
-    name: npm audit
+  pnpm-audit:
+    name: pnpm audit
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -83,21 +93,34 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
-          cache: npm
-      - run: npm install --global npm@10.9.8
-      - run: npm ci
-      - name: Audit production deps
-        run: npm audit --audit-level=high --omit=dev
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          corepack enable
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: |
+          set -euo pipefail
+          pnpm audit --audit-level high --prod
 
   scorecard:
     name: OSSF Scorecard
     if: >-
       github.repository == 'oaslananka-lab/a2a-mesh' &&
       (github.event_name == 'push' || github.event_name == 'schedule')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -107,24 +130,44 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
-      - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+
+      - name: Run OSSF Scorecard JSON
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+        with:
+          results_file: scorecard-results.json
+          results_format: json
+          publish_results: true
+
+      - name: Enforce Scorecard threshold
+        run: |
+          set -euo pipefail
+          node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('scorecard-results.json','utf8')); const score=Number(data.score); if (!Number.isFinite(score) || score < 7) { throw new Error(`OSSF Scorecard ${score} is below 7.0`); } console.log(`OSSF Scorecard ${score} >= 7.0`);"
+
+      - name: Run OSSF Scorecard SARIF
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
         with:
           results_file: scorecard-results.sarif
           results_format: sarif
-          publish_results: true
+          publish_results: false
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: scorecard-results
-          path: scorecard-results.sarif
+          path: |
+            scorecard-results.json
+            scorecard-results.sarif
           retention-days: 5
+
       - uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
+        if: always()
         with:
           sarif_file: scorecard-results.sarif
 
   workflow-security:
     name: Workflow security (zizmor)
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -132,7 +175,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+
       - name: Run zizmor
         run: |
-          pip install zizmor --break-system-packages 2>/dev/null || pip install zizmor
-          zizmor .github/workflows/ --min-severity medium
+          set -euo pipefail
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          "$HOME/.local/bin/uvx" zizmor .github/workflows/ --min-severity medium

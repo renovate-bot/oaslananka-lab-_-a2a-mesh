@@ -12,8 +12,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build-and-test:
@@ -22,7 +26,8 @@ jobs:
        github.event_name == 'workflow_dispatch') &&
       (github.event_name != 'pull_request' ||
        github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     strategy:
       matrix:
         node-version: [22.22.2, 24.14.1]
@@ -36,28 +41,28 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            docs-site/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Pin npm 10.9.8
-        run: npm install --global npm@10.9.8
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          corepack enable
 
       - name: Install Dependencies
-        run: npm ci
-
-      - name: Install docs-site dependencies
-        run: npm ci --prefix docs-site
-
-      - name: Link check (non-blocking)
-        run: npx lychee --config .lychee.toml docs-site --offline || true
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
 
       - name: Install Playwright Browsers
-        run: npm run ui:install:browsers
+        run: |
+          set -euo pipefail
+          pnpm run ui:install:browsers
 
       - name: Run CI check
-        run: npm run check
+        run: |
+          set -euo pipefail
+          pnpm run check
 
       - name: Upload coverage to Codecov
         if: >-

@@ -8,11 +8,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   lock:
     name: Lock closed issues/PRs
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       issues: write
       pull-requests: write

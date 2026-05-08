@@ -8,6 +8,7 @@ test-results/
 *.tsbuildinfo
 .cache/
 docs-site/.vitepress/.temp/
+.artifacts/
 
 # Logs
 *.log

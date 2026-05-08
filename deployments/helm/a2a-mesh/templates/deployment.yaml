@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: a2a-mesh
+  namespace: '{{ .Values.namespace }}'
 spec:
   replicas: 1
   selector:
@@ -12,13 +13,44 @@ spec:
       labels:
         app: a2a-mesh
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: a2a-mesh
           image: '{{ .Values.image.repository }}:{{ .Values.image.tag }}'
           imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: '{{ .Values.resources.limits.cpu }}'
+              memory: '{{ .Values.resources.limits.memory }}'
+            requests:
+              cpu: '{{ .Values.resources.requests.cpu }}'
+              memory: '{{ .Values.resources.requests.memory }}'
           ports:
             - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /health
               port: 3000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,5 +1,6 @@
 dist/
 coverage/
+.artifacts/
 node_modules/
 *.min.js
 package-lock.json

@@ -11,13 +11,18 @@ permissions:
   pull-requests: read
   statuses: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   thread-gate:
     name: Review Thread Gate
     if: >-
       github.repository == 'oaslananka-lab/a2a-mesh' &&
-      github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.draft == false)
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check unresolved review threads
@@ -25,7 +30,9 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const prNumber = context.payload.pull_request?.number;
+            const prNumber = context.payload.pull_request?.number
+              ?? context.payload.review?.pull_request?.number
+              ?? context.payload.comment?.pull_request_number;
             if (!prNumber) {
               core.info('No pull request found, skipping.');
               return;

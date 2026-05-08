@@ -7,13 +7,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   label:
     name: Auto-label PR
     if: >-
       github.repository == 'oaslananka-lab/a2a-mesh' &&
       github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read

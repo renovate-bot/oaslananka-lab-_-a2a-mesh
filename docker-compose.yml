@@ -46,14 +46,14 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:b1addbe72465a718643cff9e60a58e6df1841e29d6d7d60c9a85d8d72f08d1a7
     ports:
       - '6379:6379'
     volumes:
       - redis-data:/data
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.65.0@sha256:31ff142affed7bbbb6928e02aab7129d1214cdb3f5345549e99419f6dded2bde
     ports:
       - '16686:16686'
       - '4318:4318'
