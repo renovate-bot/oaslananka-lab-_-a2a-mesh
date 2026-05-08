@@ -73,7 +73,7 @@
 'area:deps':
   - changed-files:
       - any-glob-to-any-file:
-          - 'package-lock.json'
+          - 'pnpm-lock.yaml'
           - 'package.json'
           - '**/package.json'
 

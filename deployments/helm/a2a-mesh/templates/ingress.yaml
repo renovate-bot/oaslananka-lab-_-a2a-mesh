@@ -3,6 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: a2a-mesh
+  namespace: '{{ .Release.Namespace }}'
 spec:
   ingressClassName: "{{ .Values.ingress.className }}"
   rules:

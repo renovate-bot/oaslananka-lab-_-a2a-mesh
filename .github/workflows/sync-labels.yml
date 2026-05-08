@@ -10,11 +10,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   sync:
     name: Sync labels from labels.yml
     if: github.repository == 'oaslananka-lab/a2a-mesh'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       issues: write
@@ -22,71 +30,50 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+
       - name: Sync labels from config
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          python -m pip install --user pyyaml
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          import sys
-          import yaml
+          set -euo pipefail
+          ruby <<'RUBY'
+          require 'json'
+          require 'open3'
+          require 'yaml'
 
-          repo = os.environ["REPO"]
-          with open(".github/labels.yml", "r", encoding="utf-8") as fh:
-              labels = yaml.safe_load(fh) or []
+          repo = ENV.fetch('REPO')
+          labels = YAML.load_file('.github/labels.yml') || []
 
-          for label in labels:
-              name = label["name"]
-              color = label["color"]
-              description = label.get("description", "")
-              payload = json.dumps({
-                  "new_name": name,
-                  "color": color,
-                  "description": description,
-              })
-              result = subprocess.run(
-                  [
-                      "gh",
-                      "api",
-                      f"repos/{repo}/labels/{name}",
-                      "-X",
-                      "PATCH",
-                      "--input",
-                      "-",
-                      "--silent",
-                  ],
-                  input=payload,
-                  text=True,
-              )
-              if result.returncode == 0:
-                  print(f"updated {name}")
-                  continue
+          labels.each do |label|
+            name = label.fetch('name')
+            payload = JSON.dump({
+              new_name: name,
+              color: label.fetch('color'),
+              description: label.fetch('description', '')
+            })
+            _stdout, _stderr, status = Open3.capture3(
+              'gh', 'api', "repos/#{repo}/labels/#{name}", '-X', 'PATCH', '--input', '-', '--silent',
+              stdin_data: payload
+            )
+            if status.success?
+              puts "updated #{name}"
+              next
+            end
 
-              create_payload = json.dumps({
-                  "name": name,
-                  "color": color,
-                  "description": description,
-              })
-              create = subprocess.run(
-                  [
-                      "gh",
-                      "api",
-                      f"repos/{repo}/labels",
-                      "-X",
-                      "POST",
-                      "--input",
-                      "-",
-                      "--silent",
-                  ],
-                  input=create_payload,
-                  text=True,
-              )
-              if create.returncode != 0:
-                  print(f"failed to sync {name}", file=sys.stderr)
-                  sys.exit(create.returncode)
-              print(f"created {name}")
-          PY
+            create_payload = JSON.dump({
+              name: name,
+              color: label.fetch('color'),
+              description: label.fetch('description', '')
+            })
+            _stdout, stderr, create_status = Open3.capture3(
+              'gh', 'api', "repos/#{repo}/labels", '-X', 'POST', '--input', '-', '--silent',
+              stdin_data: create_payload
+            )
+            unless create_status.success?
+              warn stderr
+              exit create_status.exitstatus
+            end
+            puts "created #{name}"
+          end
+          RUBY

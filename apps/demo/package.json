@@ -9,12 +9,13 @@
     "smoke-test": "tsx run-demo.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "a2a-mesh": "*",
-    "a2a-mesh-adapters": "*",
-    "a2a-mesh-registry": "*",
+    "@anthropic-ai/sdk": "^0.95.1",
+    "a2a-mesh": "workspace:*",
+    "a2a-mesh-adapters": "workspace:*",
+    "a2a-mesh-registry": "workspace:*",
     "dotenv": "^17.2.3",
-    "openai": "^4.104.0"
+    "openai": "^6.37.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.17.2",
@@ -23,6 +24,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "^22.13.0 || ^24.0.0",
+    "pnpm": ">=11 <12"
   }
 }

@@ -15,7 +15,7 @@ Significant changes such as breaking API changes, new packages or architectural 
 
 ## Release Process
 
-1. Changesets accumulate on `main`.
-2. Contributors verify changes locally with `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run test`.
-3. Releases are cut manually by the maintainer with Changesets.
-4. Optional external pipelines may be used for manual validation, docs packaging, or artifact preparation, but they are not required for open source contributions.
+1. release-please derives release pull requests from Conventional Commits merged to `main`.
+2. Contributors verify changes locally with `pnpm run lint`, `pnpm run typecheck`, `pnpm run build`, and `pnpm run test`.
+3. Merging a release pull request creates the GitHub Release and CI-generated assets.
+4. Optional external pipelines may be used for additional validation, docs packaging, or artifact preparation, but they are not required for open source contributions.

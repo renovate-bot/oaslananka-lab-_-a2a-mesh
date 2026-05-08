@@ -5,5 +5,5 @@
 ## Install
 
 ```bash
-npm install a2a-mesh-adapters openai
+pnpm add a2a-mesh-adapters openai
 ```

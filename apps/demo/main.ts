@@ -142,7 +142,7 @@ async function main() {
       `  -d "{\\"jsonrpc\\":\\"2.0\\",\\"id\\":\\"1\\",\\"method\\":\\"message/send\\",\\"params\\":{\\"message\\":{\\"role\\":\\"user\\",\\"messageId\\":\\"demo-1\\",\\"timestamp\\":\\"2026-04-06T00:00:00.000Z\\",\\"parts\\":[{\\"type\\":\\"text\\",\\"text\\":\\"What is the A2A Protocol?\\"}]}}}"`,
       '',
       'Smoke test:',
-      'npm run smoke-test',
+      'pnpm run smoke-test',
     ].join('\n') + '\n',
   );
 }

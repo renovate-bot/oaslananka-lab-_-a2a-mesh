@@ -27,7 +27,7 @@ Developers are stuck writing custom glue code just to get a LangChain agent to t
    - **Observability:** Built-in OpenTelemetry span hooks and registry metrics, with application-owned exporter bootstrap.
 
 4. **5 Minutes to Value**
-   - The \`npx create-a2a-mesh\` CLI provides ready-to-run multi-agent templates (e.g., Researcher + Writer), bypassing the steep learning curve of agent orchestration.
+   - The \`pnpm dlx create-a2a-mesh\` CLI provides ready-to-run multi-agent templates (e.g., Researcher + Writer), bypassing the steep learning curve of agent orchestration.
 
 ## Target Audience
 

@@ -1,5 +1,5 @@
 {
-  "packageManager": "npm",
+  "packageManager": "pnpm",
   "reporters": ["html", "clear-text", "progress"],
   "testRunner": "vitest",
   "vitest": {

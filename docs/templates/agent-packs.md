@@ -13,7 +13,7 @@ The **Research Team** pack comes with three pre-configured agents:
 **Usage:**
 
 ```bash
-npx create-a2a-mesh research-project --adapter pack-research-team
+pnpm dlx create-a2a-mesh research-project --adapter pack-research-team
 ```
 
 ## `pack-support-triage`
@@ -26,7 +26,7 @@ The **Support Triage** pack is ideal for customer service routing:
 **Usage:**
 
 ```bash
-npx create-a2a-mesh support-desk --adapter pack-support-triage
+pnpm dlx create-a2a-mesh support-desk --adapter pack-support-triage
 ```
 
 ## Value Proposition

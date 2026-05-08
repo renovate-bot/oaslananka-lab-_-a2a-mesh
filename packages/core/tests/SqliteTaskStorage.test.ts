@@ -44,13 +44,15 @@ function getSqliteAvailability(): { available: boolean; reason?: string } {
     if (error instanceof Error) {
       const message = error.message;
       if (
+        message.includes("Cannot find module 'better-sqlite3'") ||
+        message.includes('Cannot find module "better-sqlite3"') ||
         message.includes('better_sqlite3.node') ||
         message.includes('NODE_MODULE_VERSION') ||
         message.includes('Please try re-compiling or re-installing the module')
       ) {
         return {
           available: false,
-          reason: 'better-sqlite3 native module needs rebuild for the current Node.js version',
+          reason: 'better-sqlite3 optional peer is not installed for this environment',
         };
       }
     }

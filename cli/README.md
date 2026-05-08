@@ -5,7 +5,7 @@ CLI package that provides the `a2a` binary.
 ## Install
 
 ```bash
-npm install -g a2a-mesh-cli
+pnpm add --global a2a-mesh-cli
 ```
 
 ## Commands

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NODE_VERSION="${1:?Usage: setup-node.sh <node-version> [npm-version]}"
-NPM_VERSION="${2:-}"
+NODE_VERSION="${1:?Usage: setup-node.sh <node-version>}"
 
 os_name="$(uname -s)"
 arch_name="$(uname -m)"
@@ -42,9 +41,7 @@ export PATH="${install_dir}/bin:${PATH}"
 
 echo "Node.js version: $(node -v)"
 
-if [[ -n "${NPM_VERSION}" ]]; then
-  npm install --global "npm@${NPM_VERSION}"
-fi
+corepack enable
 
 echo "Node.js version after setup: $(node -v)"
-echo "npm version after setup: $(npm -v)"
+echo "pnpm version after setup: $(pnpm -v)"

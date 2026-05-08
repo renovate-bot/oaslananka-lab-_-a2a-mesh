@@ -3,14 +3,14 @@
 ## Prerequisites
 
 - Node.js 22.13 or newer
-- npm workspaces enabled through the repository root
+- pnpm workspaces enabled through the repository root
 - An A2A-compatible agent URL for local testing
 
 ## Install and build
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Start a local agent
@@ -39,7 +39,7 @@ class HelloAgent extends BaseAdapter {
 ## Discover the agent
 
 ```bash
-npx a2a discover http://localhost:3000
+pnpm dlx a2a-mesh-cli discover http://localhost:3000
 ```
 
 This fetches `/.well-known/agent-card.json` and prints the normalized agent card.
@@ -47,26 +47,26 @@ This fetches `/.well-known/agent-card.json` and prints the normalized agent card
 ## Send a task
 
 ```bash
-npx a2a task send http://localhost:3000 "Summarize the latest meeting"
+pnpm dlx a2a-mesh-cli task send http://localhost:3000 "Summarize the latest meeting"
 ```
 
 Use streaming when you want live state changes:
 
 ```bash
-npx a2a task stream http://localhost:3000 "Show work in progress"
+pnpm dlx a2a-mesh-cli task stream http://localhost:3000 "Show work in progress"
 ```
 
 ## Register agents locally
 
 ```bash
-npx a2a registry start --port 3099
-npx a2a registry list --url http://localhost:3099
+pnpm dlx a2a-mesh-cli registry start --port 3099
+pnpm dlx a2a-mesh-cli registry list --url http://localhost:3099
 ```
 
 ## Recommended verification
 
 ```bash
-npm run lint
-npm run typecheck
-npm run test -- --coverage
+pnpm run lint
+pnpm run typecheck
+pnpm run test -- --coverage
 ```

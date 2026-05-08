@@ -6,8 +6,8 @@ This repository keeps its Azure DevOps YAML definitions in this folder.
 
 - `../azure-pipelines.yml` — default CI entrypoint for Azure DevOps auto-detection
 - `azure-pipelines-ci.yml` — shared CI wrapper used for build, docs, tests, and coverage
-- `azure-pipelines-pr.yml` — PR validation pipeline with changeset enforcement
-- `azure-pipelines-release.yml` — manual release pipeline for changesets and npm publish
+- `azure-pipelines-pr.yml` — manual PR validation pipeline
+- `azure-pipelines-release.yml` — manual release validation and npm publish pipeline
 - `templates/ci-job.yml` — reusable CI job template
 
 ## Bootstrap with Azure CLI

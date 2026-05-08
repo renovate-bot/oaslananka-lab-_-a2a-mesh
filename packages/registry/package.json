@@ -30,7 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.2.0",
+    "a2a-mesh": "workspace:^",
     "express": "^4.18.2",
     "cors": "^2.8.5"
   },

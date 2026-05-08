@@ -47,6 +47,6 @@
     "build": "unbuild --config build.config.ts"
   },
   "dependencies": {
-    "a2a-mesh-cli": "^1.2.0"
+    "a2a-mesh-cli": "workspace:^"
   }
 }

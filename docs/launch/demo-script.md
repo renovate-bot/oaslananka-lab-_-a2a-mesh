@@ -20,7 +20,7 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 2. Run the scaffold command:
 
    ```bash
-   npx create-a2a-mesh my-research-team --adapter pack-research-team
+   pnpm dlx create-a2a-mesh my-research-team --adapter pack-research-team
    ```
 
 3. CD into the directory, copy \`.env.example\`, and inject the API key.
@@ -34,7 +34,7 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 4. Start the network:
 
    ```bash
-   npm install && npm run dev
+   pnpm install && pnpm run dev
    ```
 
 **Speaker Notes:** "This starts a local control plane registry and registers three distinct A2A agents: a Researcher, an Analyst, and a Writer. They can now discover one another and exchange work through the mesh."
@@ -51,7 +51,7 @@ This script provides a step-by-step guide to presenting `a2a-mesh` to developers
 
    ```bash
    cd apps/registry-ui
-   npm install && npm run dev &
+   pnpm install && pnpm run dev &
    ```
 
 2. Open a browser to <http://localhost:5173>.

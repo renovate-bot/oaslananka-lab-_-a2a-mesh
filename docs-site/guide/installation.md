@@ -3,19 +3,19 @@
 ## Core runtime
 
 ```bash
-npm install a2a-mesh
+pnpm add a2a-mesh
 ```
 
 ## Common stacks
 
 ```bash
-npm install a2a-mesh a2a-mesh-adapters
+pnpm add a2a-mesh a2a-mesh-adapters
 ```
 
 ## Optional companion tools
 
 ```bash
-npm install a2a-mesh-registry a2a-mesh-cli
+pnpm add a2a-mesh-registry a2a-mesh-cli
 ```
 
 ## Requirements

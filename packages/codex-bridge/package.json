@@ -32,14 +32,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.2.0"
+    "a2a-mesh": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.2.2"
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "^22.13.0 || ^24.0.0",
+    "pnpm": ">=11 <12"
   },
   "exports": {
     ".": {

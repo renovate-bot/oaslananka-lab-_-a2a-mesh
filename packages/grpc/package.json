@@ -32,7 +32,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "a2a-mesh": "^1.2.0",
+    "a2a-mesh": "workspace:*",
     "@grpc/grpc-js": "^1.10.0",
     "@grpc/proto-loader": "^0.7.10"
   },
@@ -41,7 +41,8 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "^22.13.0 || ^24.0.0",
+    "pnpm": ">=11 <12"
   },
   "exports": {
     ".": {
