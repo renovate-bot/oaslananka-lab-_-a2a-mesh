@@ -15,7 +15,7 @@ COPY apps/demo/package.json ./apps/demo/
 RUN pnpm install --frozen-lockfile --filter a2a-demo...
 
 COPY . .
-RUN pnpm run build
+RUN pnpm --filter a2a-demo... --if-present run build
 
 WORKDIR /app/apps/demo
 USER node
