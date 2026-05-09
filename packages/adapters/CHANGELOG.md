@@ -1,5 +1,25 @@
 # a2a-mesh-adapters
 
+## [1.4.0](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-adapters-v1.3.1...a2a-mesh-adapters-v1.4.0) (2026-05-09)
+
+
+### Features
+
+* enhance registry server with unresolved hostname support and authentication checks ([d740ec8](https://github.com/oaslananka-lab/a2a-mesh/commit/d740ec8de62f4451f1aaed7113e49b81da2e7ab6))
+* **tests:** add integration tests for Azure DevOps script and client-server interactions ([58e4f1e](https://github.com/oaslananka-lab/a2a-mesh/commit/58e4f1e70f44c35b10130d850c94fbb64acebdd1))
+
+
+### Bug Fixes
+
+* **ci:** stabilize release generated checks ([7c7cfe5](https://github.com/oaslananka-lab/a2a-mesh/commit/7c7cfe52dc9387c9d64e60505527e7b1a2b5bcbd))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * a2a-mesh bumped to 1.4.0
+
 ## [1.3.1](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-adapters-v1.3.0...a2a-mesh-adapters-v1.3.1) (2026-05-09)
 
 ### Bug Fixes
