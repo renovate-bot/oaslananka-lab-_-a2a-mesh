@@ -1,5 +1,13 @@
 # a2a-mesh
 
+## [1.3.1](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-v1.3.0...a2a-mesh-v1.3.1) (2026-05-09)
+
+
+### Bug Fixes
+
+* **ci:** stabilize release generated checks ([7c7cfe5](https://github.com/oaslananka-lab/a2a-mesh/commit/7c7cfe52dc9387c9d64e60505527e7b1a2b5bcbd))
+* **protocol:** preserve json-rpc stream envelopes ([80ff094](https://github.com/oaslananka-lab/a2a-mesh/commit/80ff0941b9c0842547c897b2180f6670c1a8b944))
+
 ## [1.3.0](https://github.com/oaslananka-lab/a2a-mesh/compare/a2a-mesh-v1.2.0...a2a-mesh-v1.3.0) (2026-05-08)
 
 ### Features
