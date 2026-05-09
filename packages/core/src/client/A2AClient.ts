@@ -107,11 +107,7 @@ export class A2AClient {
   }
 
   async sendMessageStream(params: Message | MessageSendParams): Promise<AsyncGenerator<unknown>> {
-    const task = await this.rpc<Task, MessageSendParams>(
-      'message/stream',
-      this.normalizeParams(params),
-    );
-    return this.subscribeToTask(task.id);
+    return this.streamRpc<Task, MessageSendParams>('message/stream', this.normalizeParams(params));
   }
 
   async getTask(taskId: string): Promise<Task> {
@@ -162,7 +158,7 @@ export class A2AClient {
     const options: ClientCallOptions = { headers: { ...this.headers } };
     const payload = {
       jsonrpc: '2.0' as const,
-      id: `${Date.now()}`,
+      id: this.createRequestId(),
       method,
       params,
     };
@@ -195,6 +191,113 @@ export class A2AClient {
     const success = json as JsonRpcSuccessResponse<T>;
     for (const interceptor of this.interceptors) {
       await interceptor.after?.({ method, response: success.result } satisfies AfterArgs<T>);
+    }
+    return success.result;
+  }
+
+  private async *streamRpc<T, TParams extends object>(
+    method: string,
+    params: TParams,
+  ): AsyncGenerator<T> {
+    const options: ClientCallOptions = { headers: { ...this.headers } };
+    const payload = {
+      jsonrpc: '2.0' as const,
+      id: this.createRequestId(),
+      method,
+      params,
+    };
+
+    for (const interceptor of this.interceptors) {
+      await interceptor.before({ method, body: payload, options });
+    }
+
+    const response = await this.fetchWithRetry(new URL(this.rpcPath, this.baseUrl), {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
+        ...(options.serviceParameters ?? {}),
+      },
+      ...(options.signal ? { signal: options.signal } : {}),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`RPC stream failed with status ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('RPC stream response did not include a readable body');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        buffer = buffer.replace(/\r\n/g, '\n');
+
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary >= 0) {
+          const rawEvent = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const result = await this.parseJsonRpcSseEvent<T>(rawEvent, method);
+          if (result !== undefined) {
+            yield result;
+          }
+          boundary = buffer.indexOf('\n\n');
+        }
+
+        if (done) {
+          const result = await this.parseJsonRpcSseEvent<T>(buffer, method);
+          if (result !== undefined) {
+            yield result;
+          }
+          break;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private parseSseData(rawEvent: string): string {
+    return rawEvent
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+  }
+
+  private async parseJsonRpcSseEvent<T>(rawEvent: string, method: string): Promise<T | undefined> {
+    const data = this.parseSseData(rawEvent);
+    if (!data) {
+      return undefined;
+    }
+
+    let json: JsonRpcResponse<T>;
+    try {
+      json = JSON.parse(data) as JsonRpcResponse<T>;
+    } catch (error) {
+      throw new Error(`RPC stream returned malformed JSON: ${String(error)}`, {
+        cause: error,
+      });
+    }
+    if ('error' in json) {
+      const failure = json as JsonRpcFailureResponse;
+      throw new Error(`${failure.error.message} (${failure.error.code})`);
+    }
+
+    const success = json as JsonRpcSuccessResponse<T>;
+    for (const interceptor of this.interceptors) {
+      await interceptor.after?.({
+        method,
+        response: success.result,
+      } satisfies AfterArgs<T>);
     }
     return success.result;
   }
@@ -265,6 +368,10 @@ export class A2AClient {
     } finally {
       source.close();
     }
+  }
+
+  private createRequestId(): string {
+    return globalThis.crypto.randomUUID();
   }
 
   private async fetchWithRetry(

@@ -5,7 +5,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
-import express, { type Express, type Request, type Response } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Request,
+  type Response,
+} from 'express';
 import { InMemoryTaskStorage } from '../storage/InMemoryTaskStorage.js';
 import type { ITaskStorage } from '../storage/ITaskStorage.js';
 import type { AgentCard, AnyAgentCard } from '../types/agent-card.js';
@@ -49,9 +54,11 @@ import type { RequestContext } from '../types/auth.js';
 import {
   buildIdempotencyFingerprint,
   InMemoryIdempotencyStore,
+  type IdempotencyStoredResult,
   type IdempotencyStore,
 } from './IdempotencyStore.js';
 import { TaskLifecycleError } from './TaskManager.js';
+import type { TaskUpdatedEvent } from './TaskManager.js';
 
 export interface A2AServerOptions {
   rateLimit?: Partial<RateLimitConfig>;
@@ -81,6 +88,7 @@ interface IdempotencyResolution {
   scope: string;
   key: string;
   fingerprint: string;
+  replay?: IdempotencyStoredResult;
 }
 
 export abstract class A2AServer {
@@ -101,6 +109,7 @@ export abstract class A2AServer {
   ) {
     this.app = express();
     this.app.use(express.json({ limit: options.bodyLimit ?? '1mb' }));
+    this.app.use(this.jsonParseErrorHandler());
     this.agentCard = agentCard;
     this.taskManager = new TaskManager(options.taskStorage ?? new InMemoryTaskStorage());
     this.streamer = new SSEStreamer();
@@ -210,8 +219,18 @@ export abstract class A2AServer {
             });
           }
         }
-        idempotency = await this.resolveIdempotency(req, rpcReq, requestContext, res);
+        idempotency = await this.resolveIdempotency(
+          req,
+          rpcReq,
+          requestContext,
+          res,
+          this.isStreamingRpcMethod(rpcReq.method),
+        );
         if (idempotency === null) {
+          return;
+        }
+        if (this.isStreamingRpcMethod(rpcReq.method)) {
+          await this.handleStreamingRpc(rpcReq, { req, requestContext }, res, idempotency);
           return;
         }
         const result = await this.handleRpc(rpcReq, { req, requestContext });
@@ -233,10 +252,11 @@ export abstract class A2AServer {
         const response: JsonRpcResponse = {
           jsonrpc: '2.0',
           result: responseResult,
-          id: rpcReq.id || null,
+          id: rpcReq.id ?? null,
         };
         res.json(response);
       } catch (err: unknown) {
+        const responseId = this.extractJsonRpcId(req.body);
         if (err instanceof JsonRpcError) {
           if (idempotency && err.code !== ErrorCodes.IdempotencyConflict) {
             await this.idempotencyStore.set(
@@ -253,14 +273,14 @@ export abstract class A2AServer {
           res.json({
             jsonrpc: '2.0',
             error: { code: err.code, message: err.message, data: err.data },
-            id: req.body.id || null,
+            id: responseId,
           });
         } else {
           logger.error('Unhandled internal error', { error: String(err) });
           res.json({
             jsonrpc: '2.0',
             error: { code: ErrorCodes.InternalError, message: 'Internal Error' },
-            id: req.body.id || null,
+            id: responseId,
           });
         }
       }
@@ -355,11 +375,17 @@ export abstract class A2AServer {
       const params = (req.params ?? {}) as Record<string, unknown>;
       switch (req.method) {
         case 'message/send':
-        case 'message/stream':
           return await this.handleMessageRequest(
             validateMessageSendParams(params),
             req.method,
             context.req,
+          );
+
+        case 'message/stream':
+        case 'tasks/resubscribe':
+          throw new JsonRpcError(
+            ErrorCodes.UnsupportedOperation,
+            `${req.method} requires an SSE response transport`,
           );
 
         case 'tasks/get': {
@@ -751,6 +777,7 @@ export abstract class A2AServer {
     rpcReq: JsonRpcRequest,
     requestContext: RequestContext,
     res: Response,
+    deferReplay = false,
   ): Promise<IdempotencyResolution | null | undefined> {
     if (!this.isIdempotentMethod(rpcReq.method)) {
       return undefined;
@@ -790,11 +817,15 @@ export abstract class A2AServer {
       });
     }
 
+    if (deferReplay) {
+      return { scope, key, fingerprint, replay: existing.result };
+    }
+
     if (existing.result.kind === 'error') {
       res.json({
         jsonrpc: '2.0',
         error: existing.result.error,
-        id: rpcReq.id || null,
+        id: rpcReq.id ?? null,
       });
       return null;
     }
@@ -806,7 +837,7 @@ export abstract class A2AServer {
         { scope, key, fingerprint },
         true,
       ),
-      id: rpcReq.id || null,
+      id: rpcReq.id ?? null,
     });
     return null;
   }
@@ -867,6 +898,177 @@ export abstract class A2AServer {
       method === 'tasks/cancel' ||
       method === 'tasks/pushNotification/set'
     );
+  }
+
+  private jsonParseErrorHandler(): ErrorRequestHandler {
+    return (err, _req, res, next) => {
+      if (err instanceof SyntaxError && 'body' in err) {
+        res.status(200).json({
+          jsonrpc: '2.0',
+          error: {
+            code: ErrorCodes.ParseError,
+            message: 'Parse error',
+          },
+          id: null,
+        } satisfies JsonRpcResponse);
+        return;
+      }
+
+      next(err);
+    };
+  }
+
+  private isStreamingRpcMethod(method: string): boolean {
+    return method === 'message/stream' || method === 'tasks/resubscribe';
+  }
+
+  private async handleStreamingRpc(
+    rpcReq: JsonRpcRequest,
+    context: RpcContext,
+    res: Response,
+    idempotency?: IdempotencyResolution,
+  ): Promise<void> {
+    const responseId = rpcReq.id ?? null;
+    const replay = idempotency?.replay;
+    if (idempotency && replay) {
+      this.writeStreamingReplay(rpcReq, context, res, { ...idempotency, replay });
+      return;
+    }
+
+    let task: Task;
+    if (rpcReq.method === 'message/stream') {
+      task = await this.handleMessageRequest(
+        validateMessageSendParams((rpcReq.params ?? {}) as Record<string, unknown>),
+        rpcReq.method,
+        context.req,
+      );
+      if (idempotency) {
+        await this.idempotencyStore.set(
+          idempotency.scope,
+          idempotency.key,
+          idempotency.fingerprint,
+          {
+            kind: 'success',
+            value: structuredClone(this.decorateIdempotentResult(task, idempotency, false)),
+          },
+          this.options.idempotencyTtlMs ?? 60 * 60 * 1000,
+        );
+      }
+    } else {
+      const params = (rpcReq.params ?? {}) as Record<string, unknown>;
+      if (typeof params.taskId !== 'string') {
+        throw new JsonRpcError(ErrorCodes.InvalidParams, 'Missing taskId');
+      }
+      const existingTask = this.taskManager.getTask(params.taskId);
+      if (!existingTask) {
+        throw new JsonRpcError(ErrorCodes.TaskNotFound, 'Task not found');
+      }
+      if (!this.canAccessTask(existingTask, context.requestContext)) {
+        throw new JsonRpcError(ErrorCodes.Unauthorized, 'Unauthorized task access');
+      }
+      task = existingTask;
+    }
+
+    this.runtimeMetrics.recordSseConnectionOpened(Boolean(context.req.header('last-event-id')));
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    let closed = false;
+    const close = () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      this.runtimeMetrics.recordSseConnectionClosed();
+      this.taskManager.off('taskUpdated', onTaskUpdated);
+      res.end();
+    };
+
+    const writeTask = (nextTask: Task): void => {
+      if (closed) {
+        return;
+      }
+      const response: JsonRpcResponse<Task> = {
+        jsonrpc: '2.0',
+        result: nextTask,
+        id: responseId,
+      };
+      try {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(response)}\n\n`);
+      } catch {
+        close();
+        return;
+      }
+      if (this.isTerminalTaskState(nextTask.status.state)) {
+        close();
+      }
+    };
+
+    const onTaskUpdated = ({ task: updatedTask }: TaskUpdatedEvent) => {
+      if (updatedTask.id === task.id) {
+        writeTask(updatedTask);
+      }
+    };
+
+    context.req.on('close', close);
+    this.taskManager.on('taskUpdated', onTaskUpdated);
+    writeTask(this.taskManager.getTask(task.id) ?? task);
+  }
+
+  private writeStreamingReplay(
+    rpcReq: JsonRpcRequest,
+    context: RpcContext,
+    res: Response,
+    idempotency: IdempotencyResolution & { replay: IdempotencyStoredResult },
+  ): void {
+    this.runtimeMetrics.recordSseConnectionOpened(Boolean(context.req.header('last-event-id')));
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const response: JsonRpcResponse =
+      idempotency.replay.kind === 'error'
+        ? {
+            jsonrpc: '2.0',
+            error: idempotency.replay.error,
+            id: rpcReq.id ?? null,
+          }
+        : {
+            jsonrpc: '2.0',
+            result: this.decorateIdempotentResult(idempotency.replay.value, idempotency, true),
+            id: rpcReq.id ?? null,
+          };
+
+    try {
+      try {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(response)}\n\n`);
+      } catch (error) {
+        logger.warn('Failed to write JSON-RPC SSE replay', { error });
+      }
+    } finally {
+      this.runtimeMetrics.recordSseConnectionClosed();
+      res.end();
+    }
+  }
+
+  private extractJsonRpcId(body: unknown): JsonRpcRequest['id'] {
+    if (!body || typeof body !== 'object' || !('id' in body)) {
+      return null;
+    }
+
+    const id = (body as { id?: unknown }).id;
+    return typeof id === 'string' || typeof id === 'number' || id === null ? id : null;
+  }
+
+  private isTerminalTaskState(state: Task['status']['state']): boolean {
+    return state === 'completed' || state === 'failed' || state === 'canceled';
   }
 
   private toLifecycleJsonRpcError(error: TaskLifecycleError): JsonRpcError {

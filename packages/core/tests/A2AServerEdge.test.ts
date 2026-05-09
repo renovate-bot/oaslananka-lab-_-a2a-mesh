@@ -142,6 +142,101 @@ describe('A2AServer edge cases', () => {
     });
   });
 
+  it('preserves falsy JSON-RPC ids and returns protocol parse errors for invalid JSON', async () => {
+    const server = new EdgeHarnessServer();
+
+    const numericId = await request(server.getExpressApp())
+      .post('/rpc')
+      .send({
+        jsonrpc: '2.0',
+        id: 0,
+        method: 'tasks/get',
+        params: { taskId: 'does-not-exist' },
+      });
+    expect(numericId.status).toBe(200);
+    expect(numericId.body.id).toBe(0);
+    expect(numericId.body.error.code).toBe(ErrorCodes.TaskNotFound);
+
+    const emptyStringId = await request(server.getExpressApp())
+      .post('/rpc')
+      .send({
+        jsonrpc: '2.0',
+        id: '',
+        method: 'tasks/get',
+        params: { taskId: 'does-not-exist' },
+      });
+    expect(emptyStringId.status).toBe(200);
+    expect(emptyStringId.body.id).toBe('');
+
+    const parseError = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Content-Type', 'application/json')
+      .send('{"jsonrpc":"2.0","id":0,');
+    expect(parseError.status).toBe(200);
+    expect(parseError.body).toEqual({
+      jsonrpc: '2.0',
+      error: { code: ErrorCodes.ParseError, message: 'Parse error' },
+      id: null,
+    });
+  });
+
+  it('streams canonical JSON-RPC SSE responses for message/stream and tasks/resubscribe', async () => {
+    const server = new EdgeHarnessServer();
+    const message = createMessage('canonical-stream');
+
+    const streamResponse = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Accept', 'text/event-stream')
+      .set('Idempotency-Key', 'canonical-stream-key')
+      .send({
+        jsonrpc: '2.0',
+        id: 0,
+        method: 'message/stream',
+        params: { message },
+      });
+
+    expect(streamResponse.status).toBe(200);
+    expect(streamResponse.header['content-type']).toContain('text/event-stream');
+    expect(streamResponse.text).toContain('"jsonrpc":"2.0"');
+    expect(streamResponse.text).toContain('"id":0');
+    expect(streamResponse.text).toContain('"state":"completed"');
+
+    const taskId = /"id":"([^"]+)"/.exec(streamResponse.text)?.[1];
+    expect(taskId).toBeDefined();
+
+    const resubscribeResponse = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Accept', 'text/event-stream')
+      .send({
+        jsonrpc: '2.0',
+        id: '',
+        method: 'tasks/resubscribe',
+        params: { taskId },
+      });
+
+    expect(resubscribeResponse.status).toBe(200);
+    expect(resubscribeResponse.header['content-type']).toContain('text/event-stream');
+    expect(resubscribeResponse.text).toContain('"id":""');
+    expect(resubscribeResponse.text).toContain('"state":"completed"');
+
+    const replayResponse = await request(server.getExpressApp())
+      .post('/rpc')
+      .set('Accept', 'text/event-stream')
+      .set('Idempotency-Key', 'canonical-stream-key')
+      .send({
+        jsonrpc: '2.0',
+        id: 'replay-stream',
+        method: 'message/stream',
+        params: { message },
+      });
+
+    expect(replayResponse.status).toBe(200);
+    expect(replayResponse.header['content-type']).toContain('text/event-stream');
+    expect(replayResponse.text).toContain(`"id":"${taskId}"`);
+    expect(replayResponse.text).toContain('"key":"canonical-stream-key"');
+    expect(replayResponse.text).toContain('"replayed":true');
+  });
+
   it('rejects push notification webhook URLs that resolve to private networks', async () => {
     const server = new EdgeHarnessServer();
     const task = server.getTaskManager().createTask('session-ssrf', 'context-ssrf');
