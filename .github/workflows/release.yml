@@ -44,11 +44,8 @@ jobs:
     needs: release
     if: >-
       ${{
-        (
-          needs.release.outputs.paths_released != '' &&
-          needs.release.outputs.paths_released != '[]'
-        ) ||
-        github.event_name == 'workflow_dispatch'
+        needs.release.outputs.paths_released != '' &&
+        needs.release.outputs.paths_released != '[]'
       }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
