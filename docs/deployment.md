@@ -30,12 +30,11 @@ Recommended split:
 
 ## Release workflow
 
-The personal GitHub repository (`oaslananka/a2a-mesh`) is the source
-repository. The organization repository (`oaslananka-lab/a2a-mesh`) is the
-CI/CD mirror where GitHub Actions run. The organization mirror syncs from the
-personal `main` branch on schedule or manual dispatch, opens a sync pull
-request when the repositories diverge, and runs the required checks before the
-mirror is updated.
+The organization GitHub repository (`oaslananka-lab/a2a-mesh`) is the canonical
+repository for CI/CD, release, publish, security scanning, provenance, and
+package authority. The personal GitHub repository (`oaslananka/a2a-mesh`) is a
+showcase mirror. Scheduled mirror checks are advisory; updating the personal
+mirror requires an explicit manual workflow approval input.
 
 Release jobs run in the organization repository and pull publish credentials
 from Doppler at runtime instead of storing the final publishing tokens in each

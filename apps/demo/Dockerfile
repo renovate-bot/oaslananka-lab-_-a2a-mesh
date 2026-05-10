@@ -1,6 +1,7 @@
 FROM node:24-alpine@sha256:8e2c930fda481a6ec141fe5a88e8c249c69f8102fe98af505f38c081649ea749
 
 WORKDIR /app
+ENV CI=true
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -19,4 +20,4 @@ RUN pnpm --filter a2a-demo... --if-present run build
 
 WORKDIR /app/apps/demo
 USER node
-CMD ["node", "--import", "tsx", "main.ts"]
+CMD ["node", "dist/main.js"]

@@ -4,8 +4,9 @@
   "description": "Working multi-agent demo for a2a-mesh",
   "private": true,
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "dev": "tsx main.ts",
-    "start": "tsx main.ts",
+    "start": "node dist/main.js",
     "smoke-test": "tsx run-demo.ts"
   },
   "dependencies": {

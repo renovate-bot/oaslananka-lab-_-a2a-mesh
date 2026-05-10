@@ -4,6 +4,7 @@ RUN apk add --no-cache libc6-compat
 RUN corepack enable
 
 FROM base AS builder
+ENV CI=true
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json ./packages/core/
 RUN pnpm install --frozen-lockfile --filter a2a-mesh...

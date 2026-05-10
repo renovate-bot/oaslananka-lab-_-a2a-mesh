@@ -1,0 +1,113 @@
+name: Sync to Personal Mirror
+
+on:
+  schedule:
+    - cron: '11 * * * *'
+  workflow_dispatch:
+    inputs:
+      allow_mutation:
+        description: 'Allow updating the personal mirror'
+        required: false
+        default: false
+        type: boolean
+      approval:
+        description: 'Type SYNC_PERSONAL_MIRROR to update the personal mirror'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-personal-main
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mirror:
+    name: Audit personal mirror parity
+    if: github.repository == 'oaslananka-lab/a2a-mesh'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PERSONAL_REPO: oaslananka/a2a-mesh
+      ORG_REPO: oaslananka-lab/a2a-mesh
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch repositories
+        run: |
+          set -euo pipefail
+          git remote add personal "https://github.com/${PERSONAL_REPO}.git"
+          git fetch origin main --tags --prune
+          git fetch personal main --tags --prune
+
+      - name: Audit parity
+        id: parity
+        run: |
+          set -euo pipefail
+          org_sha="$(git rev-parse origin/main)"
+          personal_sha="$(git rev-parse personal/main)"
+          echo "org_sha=${org_sha}" >> "${GITHUB_OUTPUT}"
+          echo "personal_sha=${personal_sha}" >> "${GITHUB_OUTPUT}"
+          if git diff --quiet origin/main personal/main -- .; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Summarize parity
+        run: |
+          set -euo pipefail
+          {
+            echo "## Personal mirror parity"
+            echo
+            echo "- Organization SHA: \`${{ steps.parity.outputs.org_sha }}\`"
+            echo "- Personal SHA: \`${{ steps.parity.outputs.personal_sha }}\`"
+            echo "- Content differs: \`${{ steps.parity.outputs.changed }}\`"
+            echo
+            echo "Scheduled runs are advisory. Manual mutation requires the approval input."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Stop before mutation without explicit approval
+        if: >-
+          ${{
+            steps.parity.outputs.changed == 'true' &&
+            (
+              github.event_name != 'workflow_dispatch' ||
+              inputs.allow_mutation != true ||
+              inputs.approval != 'SYNC_PERSONAL_MIRROR'
+            )
+          }}
+        run: |
+          set -euo pipefail
+          echo "Personal mirror differs; leaving it unchanged without explicit approval."
+
+      - name: Update personal mirror
+        if: >-
+          ${{
+            steps.parity.outputs.changed == 'true' &&
+            github.event_name == 'workflow_dispatch' &&
+            inputs.allow_mutation == true &&
+            inputs.approval == 'SYNC_PERSONAL_MIRROR'
+          }}
+        env:
+          PERSONAL_MIRROR_TOKEN: ${{ secrets.PERSONAL_MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PERSONAL_MIRROR_TOKEN}" ]; then
+            echo "PERSONAL_MIRROR_TOKEN is required to update the personal mirror." >&2
+            exit 1
+          fi
+          git remote set-url personal \
+            "https://x-access-token:${PERSONAL_MIRROR_TOKEN}@github.com/${PERSONAL_REPO}.git"
+          git push personal refs/remotes/origin/main:refs/heads/main --force-with-lease
+          git push personal 'refs/tags/*:refs/tags/*' --force-with-lease

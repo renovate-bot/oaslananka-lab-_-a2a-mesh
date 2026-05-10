@@ -1,7 +1,6 @@
 # Azure DevOps is a manual verification target for this repository.
-# The source of truth is GitHub personal, and CI/CD is run from the
-# GitHub organization mirror. Keep Azure runs explicit so a source push
-# cannot start duplicate CI automatically.
+# The source of truth is the GitHub organization repository. Keep Azure runs
+# explicit so a source push cannot start duplicate CI automatically.
 trigger: none
 pr: none
 

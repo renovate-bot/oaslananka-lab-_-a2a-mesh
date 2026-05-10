@@ -40,6 +40,11 @@ tasks:
     cmds:
       - pnpm run release:dry-run
 
+  release:state:
+    desc: Inspect release readiness without publishing
+    cmds:
+      - pnpm run release:state
+
   ci:
     desc: Run the local CI gate
     cmds:
@@ -53,3 +58,4 @@ tasks:
       - pnpm run build
       - pnpm run docs:build
       - pnpm run release:dry-run
+      - pnpm run release:state

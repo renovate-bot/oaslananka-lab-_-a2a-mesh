@@ -18,7 +18,7 @@
   <a href="https://google.github.io/A2A">
     <img src="https://img.shields.io/badge/A2A%20Protocol-v1.0-1d4ed8?style=flat-square" alt="A2A Protocol" />
   </a>
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D20-15803d?style=flat-square" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D22-15803d?style=flat-square" alt="Node.js" />
 </p>
 
 ---

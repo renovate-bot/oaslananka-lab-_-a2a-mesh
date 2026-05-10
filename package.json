@@ -66,6 +66,9 @@
     "ui:test:e2e": "pnpm --dir apps/registry-ui run test:e2e",
     "release": "pnpm run release:stable",
     "release:dry-run": "node scripts/validate-release-config.mjs",
+    "release:state": "node scripts/release-state.mjs",
+    "review:threads": "node scripts/check-review-threads.mjs",
+    "classify:failure": "node scripts/classify-gh-failure.mjs",
     "release:stable": "pnpm run publish:stable",
     "prepare": "husky"
   },

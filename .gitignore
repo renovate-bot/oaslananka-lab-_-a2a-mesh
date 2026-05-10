@@ -5,6 +5,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+review-thread-summary.json
 *.tsbuildinfo
 .cache/
 docs-site/.vitepress/.temp/
