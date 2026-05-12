@@ -34,7 +34,7 @@
     "a2a-mesh": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.2.2"
+    "typescript": "^6.0.3"
   },
   "type": "module",
   "engines": {

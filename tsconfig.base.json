@@ -29,7 +29,8 @@
       "a2a-mesh-grpc": ["packages/grpc/src/index.ts"],
       "a2a-mesh-ws": ["packages/ws/src/index.ts"],
       "a2a-mesh-codex-bridge": ["packages/codex-bridge/src/index.ts"]
-    }
+    },
+    "ignoreDeprecations": "6.0"
   },
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

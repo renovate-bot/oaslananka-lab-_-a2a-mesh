@@ -59,7 +59,7 @@
     "@anthropic-ai/sdk": "^0.95.2",
     "langchain": "^1.2.39",
     "openai": "^6.37.0",
-    "typescript": "^5.2.2",
+    "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
   "type": "module",
