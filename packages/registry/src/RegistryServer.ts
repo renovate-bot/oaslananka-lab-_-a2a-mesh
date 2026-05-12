@@ -80,6 +80,10 @@ export interface RegistryTaskEvent {
   task: Task;
 }
 
+function routeParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export class RegistryServer {
   private readonly app: Express;
   private readonly store: IAgentStorage;
@@ -373,7 +377,7 @@ export class RegistryServer {
     });
 
     this.app.get('/agents/:id', async (req, res) => {
-      const agentId = req.params.id;
+      const agentId = routeParam(req.params.id);
       if (!agentId) {
         res.status(400).json({ error: 'Missing agent id' });
         return;
@@ -398,7 +402,7 @@ export class RegistryServer {
     });
 
     const heartbeatAgent = async (req: Request, res: Response) => {
-      const agentId = req.params.id;
+      const agentId = routeParam(req.params.id);
       if (!agentId) {
         res.status(400).json({ error: 'Missing agent id' });
         return;
@@ -438,7 +442,7 @@ export class RegistryServer {
     this.app.post('/admin/agents/:id/heartbeat', heartbeatAgent);
 
     const deleteAgent = async (req: Request, res: Response) => {
-      const agentId = req.params.id;
+      const agentId = routeParam(req.params.id);
       if (!agentId) {
         res.status(400).json({ error: 'Missing agent id' });
         return;
