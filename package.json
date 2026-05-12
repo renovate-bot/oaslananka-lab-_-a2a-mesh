@@ -83,14 +83,14 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
-    "@commitlint/config-conventional": "^21.0.1",
+    "@commitlint/config-conventional": "^20.5.0",
     "@eslint/js": "^10.0.1",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.1",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.7.0",
+    "@types/node": "^22.17.2",
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^10.2.1",
@@ -107,7 +107,7 @@
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.3",
+    "typescript-eslint": "^8.59.0",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.6"
   }
