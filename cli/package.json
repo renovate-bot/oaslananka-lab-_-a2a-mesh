@@ -36,7 +36,7 @@
     "a2a-mesh": "workspace:^",
     "a2a-mesh-registry": "workspace:^",
     "commander": "^11.1.0",
-    "chalk": "^4.1.2",
+    "chalk": "^5.6.2",
     "ora": "^5.4.1"
   },
   "devDependencies": {
