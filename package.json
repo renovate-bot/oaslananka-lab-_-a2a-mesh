@@ -97,7 +97,7 @@
     "extract-changelog-release": "^1.0.2",
     "globals": "^17.5.0",
     "husky": "^9.1.7",
-    "langsmith": "0.5.21",
+    "langsmith": "0.6.3",
     "lint-staged": "^16.4.0",
     "markdownlint-cli2": "^0.22.1",
     "prettier": "^3.8.3",

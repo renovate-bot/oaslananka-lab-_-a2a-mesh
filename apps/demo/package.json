@@ -10,7 +10,7 @@
     "smoke-test": "tsx run-demo.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.1",
+    "@anthropic-ai/sdk": "^0.95.2",
     "a2a-mesh": "workspace:*",
     "a2a-mesh-adapters": "workspace:*",
     "a2a-mesh-registry": "workspace:*",
