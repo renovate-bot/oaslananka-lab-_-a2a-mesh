@@ -36,7 +36,7 @@
   "devDependencies": {
     "@types/ws": "^8.18.1",
     "vitest": "^4.1.6",
-    "ws": "^8.18.3"
+    "ws": "^8.20.1"
   },
   "dependencies": {
     "a2a-mesh": "workspace:^"
